@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import Observation
+import SwiftUI
 import UIKit
 import GuanXingCore
 
@@ -59,12 +60,23 @@ final class PlayerModel {
         configureAudio()
     }
 
-    deinit {
-        if let timeObserver { player.removeTimeObserver(timeObserver) }
-        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+    func teardown() {
+        if let timeObserver {
+            player.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
+        }
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
+        }
         statusObservation?.invalidate()
+        statusObservation = nil
         rateObserver?.invalidate()
+        rateObserver = nil
         controlsTask?.cancel()
+        controlsTask = nil
+        player.pause()
+        player.replaceCurrentItem(with: nil)
     }
 
     var line: PlayLine {

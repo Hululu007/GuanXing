@@ -43,7 +43,7 @@ struct PlayerView: View {
         }
         .onDisappear {
             saveProgress()
-            model?.player.pause()
+            model?.teardown()
             OrientationHelper.lockPortrait()
         }
     }
