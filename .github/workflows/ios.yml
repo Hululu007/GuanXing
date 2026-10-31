@@ -5,21 +5,18 @@ on:
     branches: [main, master]
   pull_request:
   workflow_dispatch:
-    inputs:
-      export_method:
-        description: "Export method: development / ad-hoc / app-store / enterprise"
-        required: false
-        default: development
 
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -32,26 +29,47 @@ jobs:
           cd Packages/GuanXingCore
           swift test
 
-      - name: Build for simulator
+      - name: Build app without code signing
         run: |
+          mkdir -p build
+          set -o pipefail
           xcodebuild build \
             -project GuanXing.xcodeproj \
             -scheme GuanXing \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/derived \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee build/build.log
 
-      - name: Build unsigned device IPA
-        if: github.event_name == 'workflow_dispatch'
+      - name: Package unsigned IPA
         run: |
-          chmod +x scripts/package_unsigned_ipa.sh
-          ./scripts/package_unsigned_ipa.sh
+          APP_PATH="$(find build/derived/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "未找到 .app 产物"
+            exit 1
+          fi
+          rm -rf build/unsigned
+          mkdir -p build/unsigned/Payload
+          cp -R "$APP_PATH" build/unsigned/Payload/
+          (cd build/unsigned && zip -qry "$GITHUB_WORKSPACE/build/GuanXing-unsigned.ipa" Payload)
+          ls -lh build/GuanXing-unsigned.ipa
 
       - name: Upload unsigned IPA
-        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: GuanXing-unsigned-ipa
           path: build/GuanXing-unsigned.ipa
-          retention-days: 14
+          retention-days: 30
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GuanXing-build-log
+          path: build/build.log
+          retention-days: 7
+          if-no-files-found: ignore
