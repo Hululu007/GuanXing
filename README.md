@@ -1,5 +1,8 @@
 # 观星 GuanXing
 
+> GitHub 仓库：<https://github.com/waiwaicai/GuanXing>  
+> 最新未签名安装包由 GitHub Actions 产出，见仓库 `Actions` → `iOS Build` → `Artifacts` → `GuanXing-unsigned-ipa`。
+
 一个原生 iOS 影视聚合客户端，把 [LibreTV](https://github.com/waiwaicai/LibreTV) 的聚合搜索与多源浏览体验，以及 TVBox、影视仓的源配置生态，带到 iPhone 与 iPad。
 
 项目参考 LibreTV 的产品思路与数据格式，并借鉴 GitHub 上同类 TVBox 客户端的接口组织方式；业务与播放代码为独立 Swift 实现，没有嵌入或打包 LibreTV 的前端代码。
@@ -48,7 +51,14 @@ DEVELOPMENT_TEAM=你的10位TeamID ./scripts/build_ipa.sh
 
 ### GitHub Actions
 
-`.github/workflows/ios.yml` 会在 push 时构建模拟器版本；手动触发 `workflow_dispatch` 时额外产出未签名 IPA 工件。签名导出需要在仓库中配置证书 Secret 后自行扩展该工作流。
+`.github/workflows/ios.yml` 在每次 push 时执行：
+
+1. `swift test` 运行核心层测试
+2. 用 `xcodebuild` 以 `iphoneos` + 关闭签名的方式编译整个 App
+3. 打包并上传 `GuanXing-unsigned.ipa` 工件（保留 30 天）
+4. 上传 `build.log` 方便排查编译问题
+
+下载后仍需用 AltStore / Sideloadly / 爱思助手重签才能安装。签名导出需要在仓库中配置证书 Secret 后自行扩展该工作流。
 
 ## 配置格式
 
