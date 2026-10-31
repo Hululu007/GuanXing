@@ -1,0 +1,57 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: "Export method: development / ad-hoc / app-store / enterprise"
+        required: false
+        default: development
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Run core tests
+        run: |
+          cd Packages/GuanXingCore
+          swift test
+
+      - name: Build for simulator
+        run: |
+          xcodebuild build \
+            -project GuanXing.xcodeproj \
+            -scheme GuanXing \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build unsigned device IPA
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          chmod +x scripts/package_unsigned_ipa.sh
+          ./scripts/package_unsigned_ipa.sh
+
+      - name: Upload unsigned IPA
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GuanXing-unsigned-ipa
+          path: build/GuanXing-unsigned.ipa
+          retention-days: 14

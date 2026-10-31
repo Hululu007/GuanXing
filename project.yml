@@ -1,0 +1,57 @@
+name: GuanXing
+options:
+  bundleIdPrefix: com.guanxing
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  minimumXcodeGenVersion: "2.38"
+
+packages:
+  GuanXingCore:
+    path: Packages/GuanXingCore
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+  configs:
+    Debug:
+      ONLY_ACTIVE_ARCH: YES
+
+targets:
+  GuanXing:
+    type: application
+    platform: iOS
+    sources:
+      - path: GuanXing
+        excludes:
+          - Info.plist
+    dependencies:
+      - package: GuanXingCore
+        product: GuanXingCore
+    settings:
+      base:
+        PRODUCT_NAME: GuanXing
+        PRODUCT_BUNDLE_IDENTIFIER: com.guanxing.player
+        INFOPLIST_FILE: GuanXing/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_EMIT_LOC_STRINGS: YES
+        SUPPORTS_MACCATALYST: NO
+
+schemes:
+  GuanXing:
+    build:
+      targets:
+        GuanXing: all
+    run:
+      config: Debug
+    archive:
+      config: Release

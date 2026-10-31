@@ -1,0 +1,346 @@
+import Foundation
+import Observation
+import GuanXingCore
+
+@MainActor
+@Observable
+final class AppModel {
+    var sources: [VodSource]
+    var liveSources: [LiveSource]
+    var parsers: [ParseEndpoint]
+    var favorites: [FavoriteItem]
+    var history: [HistoryEntry]
+    var favoriteChannels: [FavoriteChannel]
+    var settings: AppSettings
+    var health: [String: SourceHealth]
+    var repositoryURLs: [String]
+
+    var isReady = false
+    var importMessage: ImportAlert?
+    var isRefreshingHealth = false
+
+    private let store: PersistenceStore
+
+    init(store: PersistenceStore = PersistenceStore()) {
+        self.store = store
+        let snapshot = store.load()
+        self.sources = snapshot.sources
+        self.liveSources = snapshot.liveSources
+        self.parsers = snapshot.parsers
+        self.favorites = snapshot.favorites
+        self.history = snapshot.history
+        self.favoriteChannels = snapshot.favoriteChannels
+        self.settings = snapshot.settings
+        self.health = snapshot.health
+        self.repositoryURLs = snapshot.repositoryURLs
+        self.isReady = true
+    }
+
+    var enabledSources: [VodSource] {
+        sources.filter { $0.isEnabled && !$0.isAdult }
+    }
+
+    var enabledLiveSources: [LiveSource] {
+        liveSources.filter(\.isEnabled)
+    }
+
+    func save() {
+        store.save(PersistenceStore.Snapshot(
+            sources: sources,
+            liveSources: liveSources,
+            parsers: parsers,
+            favorites: favorites,
+            history: history,
+            favoriteChannels: favoriteChannels,
+            settings: settings,
+            health: health,
+            repositoryURLs: repositoryURLs
+        ))
+    }
+
+    func toggleSource(_ source: VodSource) {
+        guard let index = sources.firstIndex(where: { $0.id == source.id }) else { return }
+        sources[index].isEnabled.toggle()
+        save()
+    }
+
+    func toggleLiveSource(_ source: LiveSource) {
+        guard let index = liveSources.firstIndex(where: { $0.id == source.id }) else { return }
+        liveSources[index].isEnabled.toggle()
+        save()
+    }
+
+    func addSource(name: String, api: String, detail: String? = nil) throws {
+        guard let normalized = URLNormalizer.normalized(api) else {
+            throw ImportError.invalidURL
+        }
+        if sources.contains(where: { $0.api == normalized }) {
+            throw ImportError.duplicate
+        }
+        sources.append(VodSource(
+            id: StableID.make("manual", normalized),
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? URLNormalizer.host(of: normalized) : name,
+            api: normalized,
+            detailURL: URLNormalizer.normalized(detail),
+            origin: .manual
+        ))
+        save()
+    }
+
+    func addLiveSource(name: String, url: String, epg: String? = nil) throws {
+        guard let normalized = URLNormalizer.normalized(url, trimTrailingSlash: false) else {
+            throw ImportError.invalidURL
+        }
+        if liveSources.contains(where: { $0.url == normalized }) {
+            throw ImportError.duplicate
+        }
+        liveSources.append(LiveSource(
+            id: StableID.make("live", normalized),
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? URLNormalizer.host(of: normalized) : name,
+            url: normalized,
+            epg: URLNormalizer.normalized(epg, trimTrailingSlash: false),
+            origin: .manual
+        ))
+        save()
+    }
+
+    func importLocalPlaylist(text: String, name: String) throws {
+        guard ConfigLoader.looksLikeM3U(text) else {
+            throw GuanXingError.decode("文件不是 M3U 播放列表")
+        }
+        let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let folder = root.appendingPathComponent("GuanXing/Playlists", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let fileStem = StableID.make("playlist", text)
+        let fileURL = folder.appendingPathComponent(fileStem + ".m3u")
+        if liveSources.contains(where: { $0.url == fileURL.absoluteString }) {
+            throw ImportError.duplicate
+        }
+        let sourceID = StableID.make("live", fileURL.absoluteString)
+        let channels = M3UParser.parse(
+            text,
+            sourceID: sourceID,
+            sourceName: displayName.isEmpty ? "本地列表" : displayName
+        )
+        guard !channels.isEmpty else {
+            throw ImportError.noUsableSource
+        }
+        try text.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let source = LiveSource(
+            id: sourceID,
+            name: displayName.isEmpty ? "本地列表" : displayName,
+            url: fileURL.absoluteString,
+            origin: .manual
+        )
+        liveSources.append(source)
+        save()
+        importMessage = ImportAlert(
+            title: "已导入",
+            message: "本地直播列表已加入源管理，共 \(channels.count) 个频道。"
+        )
+    }
+
+    func deleteSource(_ source: VodSource) {
+        sources.removeAll { $0.id == source.id }
+        health[source.id] = nil
+        save()
+    }
+
+    func deleteLiveSource(_ source: LiveSource) {
+        liveSources.removeAll { $0.id == source.id }
+        if source.url.hasPrefix("file://"), let url = URL(string: source.url) {
+            try? FileManager.default.removeItem(at: url)
+        }
+        save()
+    }
+
+    func moveSources(from offsets: IndexSet, to destination: Int) {
+        sources.move(fromOffsets: offsets, toOffset: destination)
+        save()
+    }
+
+    func restoreBuiltinSources() {
+        let existing = Set(sources.map(\.api))
+        sources.append(contentsOf: BuiltinSources.vod.filter { !existing.contains($0.api) })
+        let liveExisting = Set(liveSources.map(\.url))
+        liveSources.append(contentsOf: BuiltinSources.live.filter { !liveExisting.contains($0.url) })
+        save()
+    }
+
+    func resetAllData() {
+        sources = BuiltinSources.vod
+        liveSources = BuiltinSources.live
+        parsers = []
+        favorites = []
+        history = []
+        favoriteChannels = []
+        health = [:]
+        repositoryURLs = []
+        settings = AppSettings()
+        save()
+    }
+
+    func source(for id: String) -> VodSource? {
+        sources.first { $0.id == id }
+    }
+
+    func merge(_ config: ImportedConfig) {
+        var addedSources = 0
+        var addedLives = 0
+        let sourceAPIs = Set(sources.map(\.api))
+        for source in config.sources where !sourceAPIs.contains(source.api) {
+            sources.append(source)
+            addedSources += 1
+        }
+        let liveURLs = Set(liveSources.map(\.url))
+        for source in config.liveSources where !liveURLs.contains(source.url) {
+            liveSources.append(source)
+            addedLives += 1
+        }
+        let parserURLs = Set(parsers.map(\.url))
+        for parser in config.parsers where !parserURLs.contains(parser.url) {
+            parsers.append(parser)
+        }
+        for url in config.repositoryURLs where !repositoryURLs.contains(url) {
+            repositoryURLs.append(url)
+        }
+        save()
+        importMessage = ImportAlert(
+            title: "导入完成",
+            message: "\(config.report.format)：新增 \(addedSources) 个点播源、\(addedLives) 个直播源\(config.report.skipped > 0 ? "，跳过 \(config.report.skipped) 条" : "")",
+            detail: config.report.summary
+        )
+    }
+
+    func importConfig(text: String, name: String? = nil) throws {
+        let config = try ImportedConfigParser.parse(text: text, fallbackName: name)
+        guard !config.sources.isEmpty || !config.liveSources.isEmpty else {
+            throw ImportError.noUsableSource
+        }
+        merge(config)
+    }
+
+    func importRemote(urlString: String) async {
+        do {
+            let config = try await ConfigLoader.load(urlString: urlString)
+            guard !config.sources.isEmpty || !config.liveSources.isEmpty else {
+                throw ImportError.noUsableSource
+            }
+            merge(config)
+        } catch {
+            importMessage = ImportAlert(
+                title: "导入失败",
+                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
+                detail: "请检查地址，或确认配置为 TVBox / LibreTV JSON 格式。"
+            )
+        }
+    }
+
+    func checkAllHealth() async {
+        guard !isRefreshingHealth else { return }
+        isRefreshingHealth = true
+        defer { isRefreshingHealth = false }
+        let snapshot = enabledSources
+        for source in snapshot {
+            health[source.id] = SourceHealth(state: .checking)
+        }
+        await withTaskGroup(of: (String, SourceHealth).self) { group in
+            for source in snapshot {
+                group.addTask {
+                    (source.id, await CMSClient(source: source, timeout: 10).healthCheck())
+                }
+            }
+            for await (id, result) in group {
+                health[id] = result
+            }
+        }
+        save()
+    }
+
+    func isFavorite(_ item: VodItem) -> Bool {
+        favorites.contains { $0.item.id == item.id }
+    }
+
+    func toggleFavorite(_ item: VodItem) {
+        if let index = favorites.firstIndex(where: { $0.item.id == item.id }) {
+            favorites.remove(at: index)
+        } else {
+            favorites.insert(FavoriteItem(item: item), at: 0)
+        }
+        save()
+    }
+
+    func isFavoriteChannel(_ channel: LiveChannel) -> Bool {
+        favoriteChannels.contains { $0.channel.id == channel.id }
+    }
+
+    func toggleFavoriteChannel(_ channel: LiveChannel) {
+        if let index = favoriteChannels.firstIndex(where: { $0.channel.id == channel.id }) {
+            favoriteChannels.remove(at: index)
+        } else {
+            favoriteChannels.insert(FavoriteChannel(channel: channel), at: 0)
+        }
+        save()
+    }
+
+    func recordProgress(
+        item: VodItem,
+        line: PlayLine,
+        episodeIndex: Int,
+        position: Double,
+        duration: Double
+    ) {
+        guard settings.rememberProgress, duration.isFinite, duration > 0 else { return }
+        let episode = line.episodes.indices.contains(episodeIndex) ? line.episodes[episodeIndex] : nil
+        let entry = HistoryEntry(
+            item: item,
+            lineName: line.name,
+            episodeIndex: episodeIndex,
+            episodeName: episode?.name ?? "第 \(episodeIndex + 1) 集",
+            position: position,
+            duration: duration,
+            updatedAt: Date()
+        )
+        history.removeAll { $0.item.id == item.id }
+        history.insert(entry, at: 0)
+        if history.count > 100 { history = Array(history.prefix(100)) }
+        save()
+    }
+
+    func clearHistory() {
+        history.removeAll()
+        save()
+    }
+
+    func history(for item: VodItem) -> HistoryEntry? {
+        history.first { $0.item.id == item.id }
+    }
+
+    func setImportAlert(title: String, message: String, detail: String? = nil) {
+        importMessage = ImportAlert(title: title, message: message, detail: detail)
+    }
+}
+
+struct ImportAlert: Identifiable {
+    let id = UUID()
+    var title: String
+    var message: String
+    var detail: String?
+}
+
+enum ImportError: LocalizedError {
+    case invalidURL
+    case duplicate
+    case noUsableSource
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL: return "地址必须以 http:// 或 https:// 开头"
+        case .duplicate: return "这个源已经存在"
+        case .noUsableSource: return "配置中没有可用的点播或直播源"
+        }
+    }
+}

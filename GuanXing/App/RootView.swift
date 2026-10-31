@@ -1,0 +1,114 @@
+import SwiftUI
+
+struct RootView: View {
+    @Environment(AppModel.self) private var app
+    @Environment(AppRouter.self) private var router
+
+    var body: some View {
+        TabView(selection: Binding(
+            get: { router.selectedTab },
+            set: { router.selectedTab = $0 }
+        )) {
+            NavigationStack(path: Binding(
+                get: { router.homePath },
+                set: { router.homePath = $0 }
+            )) {
+                HomeView()
+                    .navigationDestination(for: Route.self) { route in
+                        RouteDestination(route: route)
+                    }
+            }
+            .tabItem {
+                Label("发现", systemImage: "sparkles.tv")
+            }
+            .tag(AppRouter.Tab.home)
+
+            NavigationStack(path: Binding(
+                get: { router.searchPath },
+                set: { router.searchPath = $0 }
+            )) {
+                SearchView()
+                    .navigationDestination(for: Route.self) { route in
+                        RouteDestination(route: route)
+                    }
+            }
+            .tabItem {
+                Label("搜索", systemImage: "magnifyingglass")
+            }
+            .tag(AppRouter.Tab.search)
+
+            NavigationStack(path: Binding(
+                get: { router.livePath },
+                set: { router.livePath = $0 }
+            )) {
+                LiveView()
+                    .navigationDestination(for: Route.self) { route in
+                        RouteDestination(route: route)
+                    }
+            }
+            .tabItem {
+                Label("直播", systemImage: "dot.radiowaves.left.and.right")
+            }
+            .tag(AppRouter.Tab.live)
+
+            NavigationStack(path: Binding(
+                get: { router.libraryPath },
+                set: { router.libraryPath = $0 }
+            )) {
+                LibraryView()
+                    .navigationDestination(for: Route.self) { route in
+                        RouteDestination(route: route)
+                    }
+            }
+            .tabItem {
+                Label("片库", systemImage: "bookmark")
+            }
+            .tag(AppRouter.Tab.library)
+
+            NavigationStack(path: Binding(
+                get: { router.settingsPath },
+                set: { router.settingsPath = $0 }
+            )) {
+                SettingsView()
+                    .navigationDestination(for: Route.self) { route in
+                        RouteDestination(route: route)
+                    }
+            }
+            .tabItem {
+                Label("设置", systemImage: "slider.horizontal.3")
+            }
+            .tag(AppRouter.Tab.settings)
+        }
+        .alert(item: Binding(
+            get: { app.importMessage },
+            set: { app.importMessage = $0 }
+        )) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text([alert.message, alert.detail].compactMap { $0 }.joined(separator: "\n\n")),
+                dismissButton: .default(Text("知道了"))
+            )
+        }
+    }
+}
+
+struct RouteDestination: View {
+    let route: Route
+
+    var body: some View {
+        switch route {
+        case .detail(let item):
+            DetailView(item: item)
+        case .player(let launch):
+            PlayerView(launch: launch)
+        case .livePlayer(let channel):
+            LivePlayerView(channel: channel)
+        case .sourceManager:
+            SourceManagerView()
+        case .importCenter:
+            ImportCenterView()
+        case .about:
+            AboutView()
+        }
+    }
+}
