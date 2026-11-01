@@ -36,10 +36,17 @@ final class AppRouter {
     var libraryPath = NavigationPath()
     var settingsPath = NavigationPath()
     var searchSeed: String?
+    /// 首页点了搜索钮后置位，搜索页消费完就清掉。
+    /// 用它而不用 onAppear，避免从详情页返回时把结果清空。
+    var pendingSearchFocus = false
 
     func openSearch(_ text: String? = nil) {
-        searchSeed = text
+        // 先切回搜索 tab，再清掉上一次遗留的导航栈，
+        // 否则会停在上次看过的详情页而不是搜索框。
         selectedTab = .search
+        searchPath = NavigationPath()
+        searchSeed = text
+        pendingSearchFocus = true
     }
 
     func push(_ route: Route) {

@@ -18,6 +18,11 @@ final class SearchModel {
     var errorMessage: String?
     var filterSourceID: String?
     var groupByTitle = true
+    /// 已完成的源数 / 总源数，用于展示进度。
+    var finishedCount = 0
+    var totalCount = 0
+    private var runToken = 0
+    private var inFlight: Task<Void, Never>?
 
     var filteredItems: [VodItem] {
         guard let filterSourceID else { return items }
@@ -39,24 +44,63 @@ final class SearchModel {
         }
     }
 
-    func search(_ text: String, app: AppModel) async {
+    /// 取消当前这轮搜索，已经出来的结果保留。
+    func cancel() {
+        runToken &+= 1
+        inFlight?.cancel()
+        inFlight = nil
+        isSearching = false
+    }
+
+    /// 发起一轮新搜索，自动停掉上一轮。
+    func search(_ text: String, app: AppModel) {
         let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
+
+        inFlight?.cancel()
+        runToken &+= 1
+        let token = runToken
+
         keyword = value
-        isSearching = true
         hasSearched = true
         errorMessage = nil
         filterSourceID = nil
-        defer { isSearching = false }
-        let result = await SearchService.search(keyword: value, sources: app.enabledSources)
-        items = result.items
-        outcomes = result.outcomes
-        if items.isEmpty {
-            let failures = result.outcomes.filter { $0.error != nil }
-            if failures.count == result.outcomes.count, !failures.isEmpty {
-                errorMessage = "所有源都没有响应。可以稍后重试，或在设置里更换源。"
+        items = []
+        outcomes = []
+        finishedCount = 0
+
+        let targets = app.enabledSources.filter { $0.isSearchable && !$0.isAdult }
+        totalCount = targets.count
+
+        guard !targets.isEmpty else {
+            isSearching = false
+            errorMessage = "没有启用中的可搜索片源，先去片源管理开一些。"
+            return
+        }
+
+        isSearching = true
+        // 哪个源先回来先上屏，不再等最慢的那个。
+        inFlight = Task { @MainActor [weak self] in
+            for await outcome in SearchService.stream(keyword: value, sources: targets) {
+                guard let self, !Task.isCancelled, token == self.runToken else { return }
+                self.finishedCount += 1
+                self.apply(outcome)
+            }
+            guard let self, !Task.isCancelled, token == self.runToken else { return }
+            self.isSearching = false
+            if self.items.isEmpty, !self.outcomes.isEmpty,
+               self.outcomes.allSatisfy({ $0.error != nil }) {
+                self.errorMessage = "所有源都没响应。可以稍后重试，或在设置里更新片源。"
             }
         }
+    }
+
+    private func apply(_ outcome: SearchOutcome) {
+        outcomes.removeAll { $0.source.id == outcome.source.id }
+        outcomes.append(outcome)
+        let merged = SearchService.aggregate(outcomes, keyword: keyword)
+        outcomes = merged.outcomes
+        items = merged.items
     }
 }
 
@@ -87,12 +131,39 @@ struct SearchView: View {
         .scrollIndicators(.hidden)
         .gxScreenBackground()
         .toolbar(.hidden, for: .navigationBar)
-        .task {
-            if let seed = router.searchSeed {
-                router.searchSeed = nil
-                model.keyword = seed
-                await model.search(seed, app: app)
-            }
+        .onAppear { consumePendingRequest() }
+        .onChange(of: router.pendingSearchFocus) { _, pending in
+            if pending { consumePendingRequest() }
+        }
+    }
+
+    private func consumePendingRequest() {
+        guard router.pendingSearchFocus || router.searchSeed != nil else { return }
+        router.pendingSearchFocus = false
+        handleSearchRequest()
+    }
+
+    /// 首页右上角的搜索按钮会把请求号加一，
+    /// 这里负责清掉旧结果、把光标放回输入框，并在带关键词时直接开搜。
+    private func handleSearchRequest() {
+        if let seed = router.searchSeed {
+            router.searchSeed = nil
+            model.keyword = seed
+            focused = false
+            model.search(seed, app: app)
+            return
+        }
+        model.keyword = ""
+        model.hasSearched = false
+        model.items = []
+        model.outcomes = []
+        model.filterSourceID = nil
+        model.errorMessage = nil
+        // 刚切 tab 的那一帧输入框还没上树，稍微让一步再聚焦。
+        focused = false
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            focused = true
         }
     }
 
@@ -118,7 +189,7 @@ struct SearchView: View {
                 .textInputAutocapitalization(.never)
                 .onSubmit {
                     focused = false
-                    Task { await model.search(model.keyword, app: app) }
+                    model.search(model.keyword, app: app)
                 }
             if !model.keyword.isEmpty {
                 Button {
@@ -133,7 +204,7 @@ struct SearchView: View {
             }
             Button {
                 focused = false
-                Task { await model.search(model.keyword, app: app) }
+                model.search(model.keyword, app: app)
             } label: {
                 Text("搜索")
                     .font(.subheadline.weight(.semibold))
@@ -161,7 +232,7 @@ struct SearchView: View {
                     ForEach(suggestions, id: \.self) { suggestion in
                         Button {
                             model.keyword = suggestion
-                            Task { await model.search(suggestion, app: app) }
+                            model.search(suggestion, app: app)
                         } label: {
                             Text(suggestion)
                                 .font(.subheadline)
@@ -207,7 +278,7 @@ struct SearchView: View {
 
     private var resultBlock: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if model.isSearching {
+            if model.isSearching && model.items.isEmpty {
                 searchingSkeletons
             } else if model.items.isEmpty {
                 EmptyViewState(
@@ -219,6 +290,9 @@ struct SearchView: View {
                     router.push(.sourceManager)
                 }
             } else {
+                if model.isSearching {
+                    progressLine
+                }
                 HStack {
                     Text("找到 \(model.items.count) 个结果")
                         .font(.subheadline.weight(.semibold))
@@ -334,6 +408,25 @@ struct SearchView: View {
             .gxCard(padding: 10, radius: 14)
         }
         .buttonStyle(.plain)
+    }
+
+    /// 搜索进行中的轻提示：已经回来多少个源。
+    private var progressLine: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(GXTheme.gold)
+            Text("正在搜索，已完成 \(model.finishedCount)/\(model.totalCount) 个源")
+                .font(.caption)
+                .foregroundStyle(GXTheme.secondaryText)
+            Spacer(minLength: 0)
+            Button("停止") {
+                model.cancel()
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(GXTheme.gold)
+        }
+        .padding(.vertical, 2)
     }
 
     private var sourceFilterStrip: some View {

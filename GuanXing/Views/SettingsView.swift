@@ -24,11 +24,11 @@ struct SettingsView: View {
         .toolbar(.hidden, for: .navigationBar)
         .confirmationDialog("恢复全部初始设置？", isPresented: $showResetConfirm, titleVisibility: .visible) {
             Button("恢复默认", role: .destructive) {
-                app.resetAllData()
+                app.factoryReset()
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("将清空导入的源、收藏与观看记录，并恢复内置片源。")
+            Text("将清空导入的源、收藏与观看记录，并把内置源恢复到目录最新版。")
         }
     }
 
@@ -49,10 +49,25 @@ struct SettingsView: View {
             actionCard(
                 icon: "antenna.radiowaves.left.and.right",
                 title: "源管理",
-                subtitle: "\(app.sources.count) 个点播源 · \(app.liveSources.count) 个直播源",
+                subtitle: "\(app.sources.count) 个点播源 · \(app.liveSources.count) 个直播源 · 内置 \(app.builtinSourceCount)",
                 accent: GXTheme.gold
             ) {
                 router.push(.sourceManager)
+            }
+            actionCard(
+                icon: "arrow.triangle.2.circlepath",
+                title: app.hasBuiltinCatalogUpdate ? "内置源有新版" : "更新内置源",
+                subtitle: app.hasBuiltinCatalogUpdate
+                    ? "当前 \(app.settings.builtinCatalogVersion) → 目录 \(BuiltinSources.catalogVersion)"
+                    : "目录 \(BuiltinSources.catalogVersion) · 验证于 \(BuiltinSources.verifiedAt)",
+                accent: app.hasBuiltinCatalogUpdate ? GXTheme.success : GXTheme.comet
+            ) {
+                let result = app.restoreBuiltinSources()
+                app.setImportAlert(
+                    title: "内置源已更新",
+                    message: "新增 \(result.added) 个，移出 \(result.removed) 个失效条目。",
+                    detail: "验证日期 \(BuiltinSources.verifiedAt)，共 \(BuiltinSources.verifiedAvailableCount) 个可用源。"
+                )
             }
             actionCard(
                 icon: "square.and.arrow.down",

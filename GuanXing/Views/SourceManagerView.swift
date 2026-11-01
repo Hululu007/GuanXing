@@ -11,6 +11,11 @@ struct SourceManagerView: View {
     @State private var newName = ""
     @State private var newURL = ""
     @State private var newDetail = ""
+    @State private var editing: VodSource?
+    @State private var editName = ""
+    @State private var editAPI = ""
+    @State private var editDetail = ""
+    @State private var showRestoreDeletedConfirm = false
 
     var body: some View {
         ScrollView {
@@ -58,6 +63,24 @@ struct SourceManagerView: View {
                 .presentationDetents([.medium])
                 .presentationBackground(GXTheme.background)
         }
+        .sheet(item: $editing) { source in
+            editSourceSheet(source)
+                .presentationDetents([.medium, .large])
+                .presentationBackground(GXTheme.background)
+        }
+        .confirmationDialog("把之前删掉的内置源全部找回来？", isPresented: $showRestoreDeletedConfirm, titleVisibility: .visible) {
+            Button("恢复全部内置源") {
+                let result = app.restoreBuiltinSources(includeDeleted: true)
+                app.setImportAlert(
+                    title: "内置源已恢复",
+                    message: "新增 \(result.added) 个，移出 \(result.removed) 个失效条目。",
+                    detail: "目录版本 \(BuiltinSources.catalogVersion)，验证日期 \(BuiltinSources.verifiedAt)"
+                )
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("内置源可以随时删除、改名或换成其他接口；这里会把它们恢复成官方目录的样子。")
+        }
     }
 
     private var summary: some View {
@@ -67,7 +90,7 @@ struct SourceManagerView: View {
                     Text("片源配置")
                         .font(.headline)
                         .foregroundStyle(.white)
-                    Text("支持苹果 CMS / TVBox 直连接口，Spider 源无法在 iOS 运行。")
+                    Text("内置 \(app.builtinSourceCount) 个点播源，均已实测可用；随时可停用、改地址或删除。")
                         .font(.caption)
                         .foregroundStyle(GXTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -77,6 +100,18 @@ struct SourceManagerView: View {
                     .font(.title2)
                     .foregroundStyle(GXTheme.gold)
             }
+
+            HStack(spacing: 8) {
+                Label("目录 \(BuiltinSources.catalogVersion)", systemImage: "shippingbox")
+                Text("·")
+                Text("验证 \(BuiltinSources.verifiedAt)")
+                if app.hasBuiltinCatalogUpdate {
+                    Pill(text: "可更新")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(app.hasBuiltinCatalogUpdate ? GXTheme.gold : GXTheme.secondaryText)
+
             HStack(spacing: 8) {
                 Button {
                     router.push(.importCenter)
@@ -92,6 +127,27 @@ struct SourceManagerView: View {
                 .buttonStyle(GXSecondaryButtonStyle())
                 .disabled(app.isRefreshingHealth)
             }
+
+            HStack(spacing: 8) {
+                Button {
+                    let result = app.restoreBuiltinSources()
+                    app.setImportAlert(
+                        title: "内置源已更新",
+                        message: "新增 \(result.added) 个，移出 \(result.removed) 个失效条目。",
+                        detail: "之前手动删掉的内置源会保持删除；要全部找回用下面那个按钮。"
+                    )
+                } label: {
+                    Label("更新内置源", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(GXSecondaryButtonStyle())
+
+                Button {
+                    showRestoreDeletedConfirm = true
+                } label: {
+                    Label("恢复全部", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(GXSecondaryButtonStyle())
+            }
         }
         .gxCard(padding: 16)
     }
@@ -102,10 +158,14 @@ struct SourceManagerView: View {
                 EmptyViewState(
                     icon: "antenna.radiowaves.left.and.right.slash",
                     title: "还没有点播源",
-                    message: "导入 TVBox / LibreTV 配置，或手动添加一个苹果 CMS 接口。",
-                    actionTitle: "导入配置"
+                    message: "内置源都删了也没关系，可以一键恢复，也可以导入 TVBox 配置。",
+                    actionTitle: "恢复内置源"
                 ) {
-                    router.push(.importCenter)
+                    let result = app.restoreBuiltinSources(includeDeleted: true)
+                    app.setImportAlert(
+                        title: "内置源已恢复",
+                        message: "新增 \(result.added) 个日常可用的点播源。"
+                    )
                 }
             } else {
                 ForEach(app.sources) { source in
@@ -125,7 +185,7 @@ struct SourceManagerView: View {
                                     .foregroundStyle(.white)
                                     .lineLimit(1)
                                 if source.origin == .builtin {
-                                    Pill(text: "内置")
+                                    Pill(text: app.isBuiltinSourceModified(source) ? "已换" : "内置")
                                 }
                             }
                             Text(source.host)
@@ -142,8 +202,15 @@ struct SourceManagerView: View {
                         .labelsHidden()
                         .tint(GXTheme.gold)
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { beginEdit(source) }
                     .gxCard(padding: 11, radius: 14)
                     .contextMenu {
+                        Button {
+                            beginEdit(source)
+                        } label: {
+                            Label("修改／替换地址", systemImage: "square.and.pencil")
+                        }
                         Button {
                             Task {
                                 let result = await CMSClient(source: source).healthCheck()
@@ -153,12 +220,99 @@ struct SourceManagerView: View {
                         } label: {
                             Label("检测连接", systemImage: "waveform.path.ecg")
                         }
+                        if app.isBuiltinSourceModified(source) {
+                            Button {
+                                if app.restoreBuiltinSource(id: source.id) {
+                                    app.setImportAlert(title: "已还原", message: "\(source.name) 已恢复为目录里的官方地址。")
+                                }
+                            } label: {
+                                Label("还原官方地址", systemImage: "arrow.uturn.backward")
+                            }
+                        }
                         Button(role: .destructive) {
                             app.deleteSource(source)
+                            if source.origin == .builtin {
+                                app.setImportAlert(
+                                    title: "已删除内置源",
+                                    message: "\(source.name) 不会被“更新内置源”重新加回，需要时可以恢复全部。"
+                                )
+                            }
                         } label: {
                             Label("删除源", systemImage: "trash")
                         }
                     }
+                }
+            }
+        }
+    }
+
+    private func beginEdit(_ source: VodSource) {
+        editing = source
+        editName = source.name
+        editAPI = source.api
+        editDetail = source.detailURL ?? ""
+    }
+
+    private func editSourceSheet(_ source: VodSource) -> some View {
+        NavigationStack {
+            Form {
+                Section("名称") {
+                    TextField("源名称", text: $editName)
+                }
+                Section("接口地址") {
+                    TextField("https://example.com/api.php/provide/vod", text: $editAPI)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField("详情页地址（选填）", text: $editDetail)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+                Section {
+                    Text("把这个源指向另一个可用的苹果 CMS 接口即可替换。内置来源改完也不会被自动改回去。")
+                        .font(.caption)
+                        .foregroundStyle(GXTheme.secondaryText)
+                    if source.origin == .builtin {
+                        Button {
+                            if let canonical = BuiltinSources.canonical(id: source.id) {
+                                editName = canonical.name
+                                editAPI = canonical.api
+                                editDetail = canonical.detailURL ?? ""
+                            }
+                        } label: {
+                            Label("填入官方地址", systemImage: "arrow.uturn.backward")
+                        }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(GXTheme.background)
+            .navigationTitle("修改片源")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { editing = nil }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        do {
+                            try app.updateSource(
+                                id: source.id,
+                                name: editName,
+                                api: editAPI,
+                                detail: editDetail.isEmpty ? nil : editDetail
+                            )
+                            editing = nil
+                            app.setImportAlert(title: "已保存", message: "片源地址已更新。")
+                        } catch {
+                            app.setImportAlert(
+                                title: "保存失败",
+                                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                            )
+                        }
+                    }
+                    .foregroundStyle(GXTheme.gold)
                 }
             }
         }

@@ -400,19 +400,44 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var autoPlay: Bool
     public var defaultSpeed: Double
     public var preferHighCompatibility: Bool
+    /// 已删除的内置源 ID。内置源可以删除，删除后不会被「更新内置源」重新加回来。
+    public var removedBuiltinSourceIDs: [String]
+    /// 用户当前采用的内置源目录版本，用于提示有新版可更新。
+    public var builtinCatalogVersion: String
 
     public init(
         autoNext: Bool = true,
         rememberProgress: Bool = true,
         autoPlay: Bool = true,
         defaultSpeed: Double = 1.0,
-        preferHighCompatibility: Bool = true
+        preferHighCompatibility: Bool = true,
+        removedBuiltinSourceIDs: [String] = [],
+        builtinCatalogVersion: String = BuiltinSources.catalogVersion
     ) {
         self.autoNext = autoNext
         self.rememberProgress = rememberProgress
         self.autoPlay = autoPlay
         self.defaultSpeed = defaultSpeed
         self.preferHighCompatibility = preferHighCompatibility
+        self.removedBuiltinSourceIDs = removedBuiltinSourceIDs
+        self.builtinCatalogVersion = builtinCatalogVersion
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case autoNext, rememberProgress, autoPlay, defaultSpeed, preferHighCompatibility
+        case removedBuiltinSourceIDs, builtinCatalogVersion
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        autoNext = try c.decodeIfPresent(Bool.self, forKey: .autoNext) ?? true
+        rememberProgress = try c.decodeIfPresent(Bool.self, forKey: .rememberProgress) ?? true
+        autoPlay = try c.decodeIfPresent(Bool.self, forKey: .autoPlay) ?? true
+        defaultSpeed = try c.decodeIfPresent(Double.self, forKey: .defaultSpeed) ?? 1.0
+        preferHighCompatibility = try c.decodeIfPresent(Bool.self, forKey: .preferHighCompatibility) ?? true
+        removedBuiltinSourceIDs = try c.decodeIfPresent([String].self, forKey: .removedBuiltinSourceIDs) ?? []
+        builtinCatalogVersion = try c.decodeIfPresent(String.self, forKey: .builtinCatalogVersion)
+            ?? BuiltinSources.catalogVersion
     }
 }
 

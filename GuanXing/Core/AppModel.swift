@@ -155,7 +155,55 @@ final class AppModel {
     func deleteSource(_ source: VodSource) {
         sources.removeAll { $0.id == source.id }
         health[source.id] = nil
+        if BuiltinSources.vod.contains(where: { $0.id == source.id }),
+           !settings.removedBuiltinSourceIDs.contains(source.id) {
+            settings.removedBuiltinSourceIDs.append(source.id)
+        }
         save()
+    }
+
+    /// 修改已有源的名字与接口地址。内置源也能改成其他可用接口，
+    /// 改完后仍显示为内置来源，但不会被“更新内置源”覆盖。
+    func updateSource(
+        id: String,
+        name: String,
+        api: String,
+        detail: String? = nil
+    ) throws {
+        guard let index = sources.firstIndex(where: { $0.id == id }) else {
+            throw ImportError.noUsableSource
+        }
+        guard let normalized = URLNormalizer.normalized(api) else {
+            throw ImportError.invalidURL
+        }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        sources[index].name = trimmedName.isEmpty ? URLNormalizer.host(of: normalized) : trimmedName
+        sources[index].api = normalized
+        sources[index].detailURL = URLNormalizer.normalized(detail)
+        save()
+    }
+
+    /// 把内置源恢复成目录里的官方名字与地址。
+    @discardableResult
+    func restoreBuiltinSource(id: String) -> Bool {
+        guard let canonical = BuiltinSources.canonical(id: id) else { return false }
+        guard let index = sources.firstIndex(where: { $0.id == id }) else {
+            sources.append(canonical)
+            save()
+            return true
+        }
+        sources[index].name = canonical.name
+        sources[index].api = canonical.api
+        sources[index].detailURL = canonical.detailURL
+        sources[index].isAdult = canonical.isAdult
+        save()
+        return true
+    }
+
+    /// 内置源是否被改过名字或地址。
+    func isBuiltinSourceModified(_ source: VodSource) -> Bool {
+        guard let canonical = BuiltinSources.canonical(id: source.id) else { return false }
+        return source.api.lowercased() != canonical.api.lowercased() || source.name != canonical.name
     }
 
     func deleteLiveSource(_ source: LiveSource) {
@@ -171,12 +219,52 @@ final class AppModel {
         save()
     }
 
-    func restoreBuiltinSources() {
-        let existing = Set(sources.map(\.api))
-        sources.append(contentsOf: BuiltinSources.vod.filter { !existing.contains($0.api) })
+    /// 内置源目录是否有比当前更新的一版。
+    var hasBuiltinCatalogUpdate: Bool {
+        settings.builtinCatalogVersion != BuiltinSources.catalogVersion
+    }
+
+    var builtinSourceCount: Int {
+        sources.filter { $0.origin == .builtin }.count
+    }
+
+    /// 把内置源恢复成目录里的最新一版。
+    /// - Parameter includeDeleted: 为 true 时连之前手动删掉的内置源一起恢复。
+    /// - Returns: 新增与被移出的条数，用于提示。
+    @discardableResult
+    func restoreBuiltinSources(includeDeleted: Bool = false) -> (added: Int, removed: Int) {
+        if includeDeleted {
+            settings.removedBuiltinSourceIDs.removeAll()
+        }
+        let allowed = Set(settings.removedBuiltinSourceIDs)
+
+        var added = 0
+        for source in BuiltinSources.vod where !allowed.contains(source.id) {
+            guard !BuiltinSources.isDuplicate(source, in: sources) else { continue }
+            sources.append(source)
+            added += 1
+        }
+
+        // 目录里已经被剔除的内置源（仍标记为 builtin）一并移出，避免留下失效条目。
+        let catalogIDs = Set(BuiltinSources.vod.map(\.id))
+        let catalogAPIs = Set(BuiltinSources.vod.map { $0.api.lowercased() })
+        let stale = sources.filter { source in
+            guard source.origin == .builtin else { return false }
+            return !catalogIDs.contains(source.id) && !catalogAPIs.contains(source.api.lowercased())
+        }
+        for source in stale {
+            sources.removeAll { $0.id == source.id }
+            health[source.id] = nil
+        }
+
         let liveExisting = Set(liveSources.map(\.url))
-        liveSources.append(contentsOf: BuiltinSources.live.filter { !liveExisting.contains($0.url) })
+        for source in BuiltinSources.live where !liveExisting.contains(source.url) {
+            liveSources.append(source)
+        }
+
+        settings.builtinCatalogVersion = BuiltinSources.catalogVersion
         save()
+        return (added, stale.count)
     }
 
     func resetAllData() {
@@ -189,6 +277,14 @@ final class AppModel {
         health = [:]
         repositoryURLs = []
         settings = AppSettings()
+        save()
+    }
+
+    /// 恢复出厂：清空所有数据，内置源回到目录最新版。
+    func factoryReset() {
+        resetAllData()
+        settings.removedBuiltinSourceIDs = []
+        settings.builtinCatalogVersion = BuiltinSources.catalogVersion
         save()
     }
 

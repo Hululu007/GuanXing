@@ -286,40 +286,72 @@ public struct CMSClient: Sendable {
 }
 
 public enum SearchService {
+    /// 串行版搜索：等所有源都结束后一次性返回。
+    /// App 界面请用 `stream`，能边搜边出结果。
     public static func search(
         keyword: String,
         sources: [VodSource],
         limitPerSource: Int = 40
     ) async -> (items: [VodItem], outcomes: [SearchOutcome]) {
-        let keyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !keyword.isEmpty else { return ([], []) }
+        var raw: [SearchOutcome] = []
+        for await outcome in stream(keyword: keyword, sources: sources, limitPerSource: limitPerSource) {
+            raw.append(outcome)
+        }
+        return aggregate(raw, keyword: keyword)
+    }
 
-        let raw: [SearchOutcome] = await withTaskGroup(of: SearchOutcome.self) { group in
-            for source in sources where source.isEnabled && source.isSearchable && !source.isAdult {
-                group.addTask {
-                    let start = Date()
-                    do {
-                        let items = try await CMSClient(source: source).search(keyword: keyword)
-                        return SearchOutcome(
-                            source: source,
-                            items: Array(items.prefix(limitPerSource)),
-                            elapsed: Date().timeIntervalSince(start)
-                        )
-                    } catch {
-                        return SearchOutcome(
-                            source: source,
-                            items: [],
-                            error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
-                            elapsed: Date().timeIntervalSince(start)
-                        )
+    /// 逐个源流式返回结果，哪个源先结束先报告。
+    public static func stream(
+        keyword: String,
+        sources: [VodSource],
+        limitPerSource: Int = 40
+    ) -> AsyncStream<SearchOutcome> {
+        let keyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targets = sources.filter { $0.isEnabled && $0.isSearchable && !$0.isAdult }
+        guard !keyword.isEmpty else { return AsyncStream { $0.finish() } }
+
+        return AsyncStream { continuation in
+            let worker = Task {
+                await withTaskGroup(of: SearchOutcome.self) { group in
+                    for source in targets {
+                        group.addTask {
+                            await searchOne(source: source, keyword: keyword, limit: limitPerSource)
+                        }
+                    }
+                    for await outcome in group {
+                        continuation.yield(outcome)
                     }
                 }
+                continuation.finish()
             }
-            var results: [SearchOutcome] = []
-            for await outcome in group { results.append(outcome) }
-            return results
+            continuation.onTermination = { _ in worker.cancel() }
         }
+    }
 
+    static func searchOne(source: VodSource, keyword: String, limit: Int) async -> SearchOutcome {
+        let start = Date()
+        do {
+            let items = try await CMSClient(source: source, timeout: 12).search(keyword: keyword)
+            return SearchOutcome(
+                source: source,
+                items: Array(items.prefix(limit)),
+                elapsed: Date().timeIntervalSince(start)
+            )
+        } catch {
+            return SearchOutcome(
+                source: source,
+                items: [],
+                error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
+                elapsed: Date().timeIntervalSince(start)
+            )
+        }
+    }
+
+    /// 把单个源的结果合并成去重、排序后的平铺列表。
+    public static func aggregate(
+        _ raw: [SearchOutcome],
+        keyword: String
+    ) -> (items: [VodItem], outcomes: [SearchOutcome]) {
         let outcomes = raw.sorted { lhs, rhs in
             if lhs.items.isEmpty != rhs.items.isEmpty { return !lhs.items.isEmpty }
             return lhs.elapsed < rhs.elapsed
@@ -331,8 +363,8 @@ public enum SearchService {
                 items.append(item)
             }
         }
+        let keywordNormalized = TextSanitizer.normalizedTitle(keyword)
         items.sort { lhs, rhs in
-            let keywordNormalized = TextSanitizer.normalizedTitle(keyword)
             let lhsExact = TextSanitizer.normalizedTitle(lhs.name) == keywordNormalized
             let rhsExact = TextSanitizer.normalizedTitle(rhs.name) == keywordNormalized
             if lhsExact != rhsExact { return lhsExact }

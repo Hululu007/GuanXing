@@ -28,6 +28,7 @@ struct ImportCenterView: View {
                 default:
                     fileBlock
                 }
+                quickBlock
                 formatHelp
             }
             .padding(.horizontal, 18)
@@ -128,6 +129,40 @@ struct ImportCenterView: View {
             .buttonStyle(GXPrimaryButtonStyle())
         }
         .gxCard(padding: 16)
+    }
+
+    private var quickBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "推荐多仓", subtitle: "一键拉取整个配置集")
+            ForEach(BuiltinSources.repositoryURLs, id: \.self) { url in
+                Button {
+                    urlText = url
+                    importRemote()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "shippingbox")
+                            .font(.caption)
+                            .foregroundStyle(GXTheme.comet)
+                            .frame(width: 22)
+                        Text(url)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.white.opacity(0.82))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.down.circle")
+                            .font(.caption)
+                            .foregroundStyle(GXTheme.gold)
+                    }
+                    .padding(.vertical, 9)
+                }
+                .buttonStyle(.plain)
+            }
+            Text("多仓配置里只有苹果 CMS 接口会被导入，Spider 类条目会自动跳过并列出原因。")
+                .font(.caption2)
+                .foregroundStyle(GXTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .gxCard(padding: 15)
     }
 
     private var formatHelp: some View {
@@ -244,7 +279,11 @@ struct AboutView: View {
                     .padding(.horizontal, 12)
 
                 VStack(spacing: 0) {
-                    aboutRow(label: "内置点播源", value: "\(app.sources.filter { $0.origin == .builtin }.count)")
+                    aboutRow(label: "内置点播源", value: "\(app.builtinSourceCount) / \(BuiltinSources.vod.count)")
+                    Divider().overlay(GXTheme.stroke)
+                    aboutRow(label: "内置源目录", value: BuiltinSources.catalogVersion)
+                    Divider().overlay(GXTheme.stroke)
+                    aboutRow(label: "目录验证日", value: BuiltinSources.verifiedAt)
                     Divider().overlay(GXTheme.stroke)
                     aboutRow(label: "导入点播源", value: "\(app.sources.filter { $0.origin != .builtin }.count)")
                     Divider().overlay(GXTheme.stroke)
