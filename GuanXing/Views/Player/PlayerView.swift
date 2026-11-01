@@ -44,6 +44,8 @@ struct PlayerView: View {
         .onDisappear {
             saveProgress()
             model?.teardown()
+            // 把手势改过的亮度还原成进入播放器前的值。
+            model?.restoreBrightness()
             OrientationHelper.lockPortrait()
         }
     }
@@ -51,17 +53,19 @@ struct PlayerView: View {
     private func content(_ model: PlayerModel) -> some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VStack(spacing: 0) {
-                if !model.isFullscreen {
-                    topBar(model)
-                }
+            if model.isFullscreen {
+                // 全屏时视频铺满整块屏幕，手势层直接压在视频上。
                 videoArea(model)
-                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                if !model.isFullscreen {
+                    .ignoresSafeArea()
+            } else {
+                VStack(spacing: 0) {
+                    topBar(model)
+                    videoArea(model)
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
                     episodePanel(model)
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             }
         }
     }
@@ -105,11 +109,14 @@ struct PlayerView: View {
 
     private func videoArea(_ model: PlayerModel) -> some View {
         ZStack {
-            PlayerSurface(player: model.player)
+            PlayerSurface(player: model.player, fill: model.isFullscreen)
+            // 手势层压在视频上，但控制在控件层之下，避免挡住按钮点击。
+            PlayerGestureLayer(model: model)
             if model.isBuffering || model.isLoading {
                 ProgressView()
                     .tint(.white)
                     .scaleEffect(1.2)
+                    .allowsHitTesting(false)
             }
             if let error = model.errorMessage {
                 VStack(spacing: 10) {
@@ -133,10 +140,6 @@ struct PlayerView: View {
                 controlsOverlay(model)
                     .transition(.opacity)
             }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            model.toggleControls()
         }
     }
 
@@ -191,7 +194,7 @@ struct PlayerView: View {
 
             VStack(spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(timeText(dragPosition ?? model.position))
+                    Text(timeText(model.previewPosition ?? dragPosition ?? model.position))
                     Spacer()
                     if !model.bufferedText.isEmpty {
                         Text(model.bufferedText)
@@ -207,8 +210,9 @@ struct PlayerView: View {
                 .foregroundStyle(.white.opacity(0.84))
 
                 GeometryReader { proxy in
+                    let shown = model.previewPosition ?? dragPosition ?? model.position
                     let progress = model.duration > 0
-                        ? min(max((dragPosition ?? model.position) / model.duration, 0), 1)
+                        ? min(max(shown / model.duration, 0), 1)
                         : 0
                     let bufferedRatio = model.duration > 0
                         ? min(max(model.bufferedDuration / model.duration, 0), 1)
@@ -229,7 +233,8 @@ struct PlayerView: View {
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
-                                guard model.duration > 0 else { return }
+                                guard model.duration > 0, proxy.size.width > 1 else { return }
+                                model.previewPosition = nil
                                 let ratio = min(max(value.location.x / proxy.size.width, 0), 1)
                                 dragPosition = ratio * model.duration
                             }
@@ -277,20 +282,30 @@ struct PlayerView: View {
                 .font(.system(size: 15))
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, model.isFullscreen ? 18 : 10)
+            .padding(.bottom, model.isFullscreen ? 26 : 10)
         }
-        .background(
+        .background {
+            // 背景不参与点击判定，否则会挡住下面的手势层。
             LinearGradient(
                 colors: [.black.opacity(0.62), .clear, .black.opacity(0.74)],
                 startPoint: .top,
                 endPoint: .bottom
             )
-        )
+            .allowsHitTesting(false)
+        }
+        .safeAreaPadding(controlInsets(model))
         .overlay(alignment: .center) {
             if model.showSpeedPicker {
                 speedPicker(model)
             }
         }
+    }
+
+    /// 全屏时避开刘海与底部指示条，竖屏时不需要额外内边距。
+    private func controlInsets(_ model: PlayerModel) -> EdgeInsets {
+        model.isFullscreen
+            ? EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0)
+            : EdgeInsets()
     }
 
     private func speedPicker(_ model: PlayerModel) -> some View {
@@ -381,6 +396,8 @@ struct PlayerView: View {
             model.isFullscreen = true
             model.controlsVisible = true
         }
+        // 进入全屏时重新读一次真实亮度/音量，避免和用户刚在控制中心改过的值不一致。
+        model.syncSystemLevels()
         OrientationHelper.lockLandscape()
         model.showControlsTemporarily()
     }
@@ -390,6 +407,7 @@ struct PlayerView: View {
             model.isFullscreen = false
             model.controlsVisible = true
         }
+        model.previewPosition = nil
         OrientationHelper.lockPortrait()
     }
 
@@ -420,15 +438,22 @@ struct PlayerView: View {
 
 struct PlayerSurface: UIViewRepresentable {
     let player: AVPlayer
+    /// 全屏时按屏幕比例铺满（会裁掉少量边缘），竖屏时保持完整画面。
+    var fill: Bool = false
 
     func makeUIView(context: Context) -> PlayerContainer {
         let view = PlayerContainer()
         view.playerLayer.player = player
+        view.playerLayer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
         return view
     }
 
     func updateUIView(_ uiView: PlayerContainer, context: Context) {
         uiView.playerLayer.player = player
+        let gravity: AVLayerVideoGravity = fill ? .resizeAspectFill : .resizeAspect
+        if uiView.playerLayer.videoGravity != gravity {
+            uiView.playerLayer.videoGravity = gravity
+        }
     }
 
     final class PlayerContainer: UIView {

@@ -28,6 +28,12 @@ final class PlayerModel {
     var bufferedDuration: Double = 0
     /// 最近一次播放的实测码率，单位 kbps，用于估算缓冲速度。
     var bitrateKbps: Int = 0
+    /// 手势拖动时的预览进度；有值时时间轴显示它，松手才真正 seek。
+    var previewPosition: Double?
+    /// 屏幕亮度（0...1），左侧上下滑动控制。
+    var brightness: Double = 0.5
+    /// 系统音量（0...1），右侧上下滑动控制。
+    var volume: Double = 0.5
     var bufferedText: String {
         guard bufferedDuration > 0 else { return "" }
         let remaining = max(0, bufferedDuration - position)
@@ -48,6 +54,8 @@ final class PlayerModel {
     private var rateObserver: NSKeyValueObservation?
     private var endObserver: NSObjectProtocol?
     private var controlsTask: Task<Void, Never>?
+    /// 进入播放器时的原始屏幕亮度，退出时还原。
+    private var baselineBrightness: Double?
 
     init(
         launch: PlayerLaunch,
@@ -109,6 +117,7 @@ final class PlayerModel {
 
     func prepare() async {
         guard player.currentItem == nil else { return }
+        syncSystemLevels()
         observePlayer()
         await loadCurrentEpisode()
     }
@@ -185,6 +194,36 @@ final class PlayerModel {
         speed = value
         if isPlaying { player.rate = Float(value) }
         showSpeedPicker = false
+    }
+    // MARK: - 亮度与音量（手势）
+
+    func setBrightness(_ value: Double) {
+        let next = min(max(value, 0), 1)
+        brightness = next
+        ScreenBrightness.set(next)
+    }
+
+    func setVolume(_ value: Double) {
+        let next = min(max(value, 0), 1)
+        volume = next
+        SystemVolume.set(next)
+    }
+
+    /// 重新读取系统真实亮度/音量，避免和用户刚在控制中心改过的值不一致。
+    /// 第一次同步时记下原始亮度，退出播放器时按它还原。
+    func syncSystemLevels() {
+        let current = ScreenBrightness.current
+        if baselineBrightness == nil { baselineBrightness = current }
+        brightness = current
+        volume = SystemVolume.current
+    }
+
+    /// 退出播放器时把亮度还原成进入前的值。
+    func restoreBrightness() {
+        if let baselineBrightness {
+            ScreenBrightness.set(baselineBrightness)
+        }
+        baselineBrightness = nil
     }
 
     func nextEpisode() {
