@@ -24,6 +24,16 @@ final class PlayerModel {
     var isFullscreen = false
     var showEpisodePicker = false
     var showSpeedPicker = false
+    /// 已缓冲时长（秒），用于展示缓冲进度。
+    var bufferedDuration: Double = 0
+    /// 最近一次播放的实测码率，单位 kbps，用于估算缓冲速度。
+    var bitrateKbps: Int = 0
+    var bufferedText: String {
+        guard bufferedDuration > 0 else { return "" }
+        let remaining = max(0, bufferedDuration - position)
+        guard remaining > 0 else { return "" }
+        return String(format: "缓冲 %.0fs", remaining)
+    }
 
     var sourceName: String { source.name }
 
@@ -77,6 +87,8 @@ final class PlayerModel {
         controlsTask = nil
         player.pause()
         player.replaceCurrentItem(with: nil)
+        bufferedDuration = 0
+        bitrateKbps = 0
     }
 
     var line: PlayLine {
@@ -269,6 +281,7 @@ final class PlayerModel {
                    itemDuration.isFinite, itemDuration > 0 {
                     self.duration = itemDuration
                 }
+                self.updateNetworkMetrics()
             }
         }
         rateObserver = player.observe(\.timeControlStatus, options: [.new, .initial]) { [weak self] player, _ in
@@ -304,6 +317,7 @@ final class PlayerModel {
                 case .readyToPlay:
                     self.errorMessage = nil
                     self.isLoading = false
+                    self.updateAccessLog()
                     let shouldResume = self.initialPosition > 3
                     if shouldResume {
                         self.player.seek(
@@ -326,5 +340,28 @@ final class PlayerModel {
                 }
             }
         }
+    }
+
+    private func updateNetworkMetrics() {
+        guard let item = player.currentItem else {
+            bufferedDuration = 0
+            return
+        }
+        bufferedDuration = Self.bufferedSeconds(of: item)
+        if let event = player.currentItem?.accessLog()?.events.last, event.numberOfBytesTransferred > 0 {
+            bitrateKbps = Int(event.observedBitrate / 1000)
+        }
+    }
+
+    private func updateAccessLog() {
+        if let event = player.currentItem?.accessLog()?.events.last, event.numberOfBytesTransferred > 0 {
+            bitrateKbps = Int(event.observedBitrate / 1000)
+        }
+    }
+
+    static func bufferedSeconds(of item: AVPlayerItem) -> Double {
+        guard let range = item.loadedTimeRanges.last?.timeRangeValue else { return 0 }
+        let end = CMTimeGetSeconds(range.start) + CMTimeGetSeconds(range.duration)
+        return end.isFinite ? max(0, end) : 0
     }
 }

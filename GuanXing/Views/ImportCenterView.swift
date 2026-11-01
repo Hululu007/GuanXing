@@ -116,7 +116,7 @@ struct ImportCenterView: View {
             Text("从本地文件导入")
                 .font(.headline)
                 .foregroundStyle(.white)
-            Text("支持 .json、.txt、.m3u、.m3u8。配置会保存到 App 沙盒内，不读取其他文件。")
+            Text("支持 .json、.txt、.m3u、.m3u8。直播列表会自动识别 M3U、TXT（#genre#）与 JSON，GBK 编码的频道表也能读取。")
                 .font(.caption)
                 .foregroundStyle(GXTheme.secondaryText)
             Button {
@@ -183,10 +183,10 @@ struct ImportCenterView: View {
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             do {
                 let data = try Data(contentsOf: url)
-                guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
+                guard let text = TextDecoder.decode(data) else {
                     throw GuanXingError.decode("文件编码无法识别")
                 }
-                if ConfigLoader.looksLikeM3U(text) {
+                if ConfigLoader.looksLikeLivePlaylist(text) {
                     try app.importLocalPlaylist(
                         text: text,
                         name: url.deletingPathExtension().lastPathComponent
@@ -260,7 +260,7 @@ struct AboutView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(GXTheme.secondaryText)
                     Text("SwiftUI · AVPlayer · 苹果 CMS · TVBox 配置兼容")
-                    Text("参考 LibreTV（AGPL-3.0）的产品思路与数据格式；解析与播放代码为独立实现。")
+                    Text("参考 LibreTV（AGPL-3.0）的产品思路与数据格式；借鉴 DpadTV、TVBox-tvs 的直播源格式与交互设计。解析与播放代码均为独立 Swift 实现。")
                 }
                 .font(.caption)
                 .foregroundStyle(GXTheme.secondaryText)

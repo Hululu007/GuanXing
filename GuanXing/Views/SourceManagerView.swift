@@ -257,7 +257,7 @@ struct SourceManagerView: View {
     private var addLiveSheet: some View {
         NavigationStack {
             Form {
-                Section("M3U 直播列表") {
+                Section("直播源地址") {
                     TextField("名称（可选）", text: $newName)
                     TextField("https://example.com/live.m3u", text: $newURL)
                         .keyboardType(.URL)
@@ -265,7 +265,7 @@ struct SourceManagerView: View {
                         .autocorrectionDisabled()
                 }
                 Section {
-                    Text("支持标准 M3U / M3U8 播放列表。HTTP-FLV 频道在 iOS 上无法直接播放。")
+                    Text("支持 M3U / M3U8、TXT（#genre# 分组频道表）与 JSON 直播列表，导入后自动识别格式。HTTP-FLV 频道在 iOS 上无法直接播放。")
                         .font(.caption)
                         .foregroundStyle(GXTheme.secondaryText)
                 }

@@ -6,7 +6,7 @@ public enum ImportedConfigParser {
         do {
             json = try JSONC.parse(text)
         } catch {
-            throw GuanXingError.decode("无法识别订阅格式，请确认是 TVBox / LibreTV JSON 或 M3U")
+            throw GuanXingError.decode("无法识别订阅格式，请确认是 TVBox / LibreTV JSON，或 M3U / TXT / JSON 直播列表")
         }
 
         if let object = json as? [String: Any] {
@@ -108,7 +108,7 @@ public enum ImportedConfigParser {
             let type = LooseValue.int(live["type"]) ?? 0
             guard type == 0 else {
                 skipped += 1
-                reasons["非 M3U 直播", default: 0] += 1
+                reasons["非 M3U/TXT 直播", default: 0] += 1
                 continue
             }
             guard let url = URLNormalizer.normalized(LooseValue.string(live["url"]), trimTrailingSlash: false) else {
@@ -286,7 +286,9 @@ public enum ImportedConfigParser {
 
     private static func isLiveURL(_ raw: String) -> Bool {
         let lower = raw.lowercased()
-        return lower.contains(".m3u") || lower.contains("/live/") || lower.contains("iptv")
+        if lower.contains(".m3u") || lower.contains("/live/") || lower.contains("iptv") { return true }
+        if lower.contains(".txt"), lower.contains("live") || lower.contains("iptv") { return true }
+        return false
     }
 
     private static func extractRepositories(_ raw: Any?) -> [String] {
@@ -361,25 +363,40 @@ public enum ConfigLoader {
             throw GuanXingError.invalidURL(urlString)
         }
         let (data, response) = try await GuanXingHTTP.get(url, timeout: timeout)
-        let text = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .isoLatin1)
-            ?? ""
+        let text = TextDecoder.decode(data) ?? ""
 
-        if looksLikeM3U(text) {
-            let channels = M3UParser.parse(text, sourceID: StableID.make("live", url), sourceName: URLNormalizer.host(of: url))
+        _ = response
+        if let format = LivePlaylist.detect(text) {
+            let sourceID = StableID.make("live", url)
+            let name = URLNormalizer.host(of: url)
+            let result = LivePlaylist.parse(text, sourceID: sourceID, sourceName: name)
+            let count = result?.channels.count ?? 0
+            var messages = ["订阅含 \(count) 个频道"]
+            if let alternates = result?.alternateURLCount, alternates > 0 {
+                messages.append("忽略 \(alternates) 个备用地址")
+            }
             return ImportedConfig(
-                name: URLNormalizer.host(of: url),
+                name: name,
                 sources: [],
-                liveSources: [LiveSource(id: StableID.make("live", url), name: URLNormalizer.host(of: url), url: url, origin: .imported)],
-                report: ImportReport(format: "M3U", sourceCount: 0, liveCount: 1, messages: ["订阅含 \(channels.count) 个频道"])
+                liveSources: [LiveSource(id: sourceID, name: name, url: url, origin: .imported)],
+                report: ImportReport(
+                    format: format.title,
+                    sourceCount: 0,
+                    liveCount: 1,
+                    messages: messages
+                )
             )
         }
-        _ = response
         return try ImportedConfigParser.parse(text: text, fallbackName: URLNormalizer.host(of: url))
     }
 
     public static func looksLikeM3U(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.hasPrefix("#EXTM3U") || trimmed.hasPrefix("#EXTINF")
+    }
+
+    /// 是否为可直接导入的直播列表（M3U / TXT / JSON 频道表）。
+    public static func looksLikeLivePlaylist(_ text: String) -> Bool {
+        LivePlaylist.detect(text) != nil
     }
 }

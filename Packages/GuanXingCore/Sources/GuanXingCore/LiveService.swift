@@ -5,22 +5,28 @@ public enum LiveService {
         let text: String
         if source.url.hasPrefix("file://"), let url = URL(string: source.url) {
             let data = try Data(contentsOf: url)
-            guard let decoded = String(data: data, encoding: .utf8)
-                ?? String(data: data, encoding: .isoLatin1) else {
+            guard let decoded = TextDecoder.decode(data) else {
                 throw GuanXingError.decode("本地播放列表编码无法识别")
             }
             text = decoded
         } else {
             text = try await GuanXingHTTP.getText(source.url, timeout: 20)
         }
-        guard ConfigLoader.looksLikeM3U(text) else {
-            throw GuanXingError.decode("直播源不是 M3U 格式")
+        return try channels(in: text, source: source)
+    }
+
+    public static func channels(in text: String, source: LiveSource) throws -> [LiveChannel] {
+        guard let result = LivePlaylist.parse(
+            text,
+            sourceID: source.id,
+            sourceName: source.name
+        ) else {
+            throw GuanXingError.decode("直播源不是 M3U / TXT / JSON 格式")
         }
-        let channels = M3UParser.parse(text, sourceID: source.id, sourceName: source.name)
-        guard !channels.isEmpty else {
+        guard !result.channels.isEmpty else {
             throw GuanXingError.empty("直播源中没有可用频道")
         }
-        return channels
+        return result.channels
     }
 
     public static func loadAll(sources: [LiveSource]) async -> (channels: [LiveChannel], errors: [String]) {

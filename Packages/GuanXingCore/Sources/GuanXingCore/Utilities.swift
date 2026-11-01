@@ -449,8 +449,9 @@ public enum GuanXingHTTP {
         timeout: TimeInterval = 15
     ) async throws -> String {
         let (data, _) = try await get(urlString, headers: headers, timeout: timeout)
-        if let text = String(data: data, encoding: .utf8) { return text }
-        if let text = String(data: data, encoding: .isoLatin1) { return text }
-        throw GuanXingError.decode("文本编码无法识别")
+        guard let text = TextDecoder.decode(data) else {
+            throw GuanXingError.decode("文本编码无法识别")
+        }
+        return text
     }
 }

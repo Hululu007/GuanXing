@@ -17,10 +17,19 @@ final class SearchModel {
     var hasSearched = false
     var errorMessage: String?
     var filterSourceID: String?
+    var groupByTitle = true
 
     var filteredItems: [VodItem] {
         guard let filterSourceID else { return items }
         return items.filter { $0.sourceID == filterSourceID }
+    }
+
+    var titleGroups: [TitleGroup] {
+        TitleGrouper.group(filteredItems)
+    }
+
+    var mergedGroupCount: Int {
+        titleGroups.filter { $0.sourceCount > 1 }.count
     }
 
     var sourceCounts: [SourceCount] {
@@ -220,21 +229,111 @@ struct SearchView: View {
                         .foregroundStyle(GXTheme.secondaryText)
                 }
                 sourceFilterStrip
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 108), spacing: 12)],
-                    spacing: 18
-                ) {
-                    ForEach(model.filteredItems) { item in
-                        Button {
-                            router.push(.detail(item))
-                        } label: {
-                            PosterCard(item: item)
+                groupingBar
+                if model.groupByTitle {
+                    groupedResults
+                } else {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 108), spacing: 12)],
+                        spacing: 18
+                    ) {
+                        ForEach(model.filteredItems) { item in
+                            Button {
+                                router.push(.detail(item))
+                            } label: {
+                                PosterCard(item: item)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
         }
+    }
+
+    private var groupingBar: some View {
+        HStack(spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    model.groupByTitle.toggle()
+                }
+            } label: {
+                Label(
+                    model.groupByTitle ? "按片名合并" : "平铺结果",
+                    systemImage: model.groupByTitle ? "rectangle.stack" : "square.grid.2x2"
+                )
+                .font(.caption.weight(.medium))
+                .foregroundStyle(model.groupByTitle ? Color.black.opacity(0.84) : .white.opacity(0.82))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(model.groupByTitle ? GXTheme.gold : GXTheme.surface, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            if model.groupByTitle, model.mergedGroupCount > 0 {
+                Text("\(model.mergedGroupCount) 部有多个源")
+                    .font(.caption2)
+                    .foregroundStyle(GXTheme.secondaryText)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var groupedResults: some View {
+        LazyVStack(spacing: 10) {
+            ForEach(model.titleGroups) { group in
+                titleGroupCard(group)
+            }
+        }
+    }
+
+    private func titleGroupCard(_ group: TitleGroup) -> some View {
+        Button {
+            if let primary = group.primary {
+                router.push(.detail(primary))
+            }
+        } label: {
+            HStack(spacing: 12) {
+                RemoteImage(url: group.primary?.pic)
+                    .frame(width: 66, height: 92)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(group.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    if let meta = group.primary?.displayMeta, !meta.isEmpty {
+                        Text(meta)
+                            .font(.caption2)
+                            .foregroundStyle(GXTheme.secondaryText)
+                            .lineLimit(1)
+                    }
+                    HStack(spacing: 6) {
+                        Text("\(group.sourceCount) 个源")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(group.sourceCount > 1 ? GXTheme.gold : GXTheme.secondaryText)
+                        if group.items.count != group.sourceCount {
+                            Text("· \(group.items.count) 条线路")
+                                .font(.caption2)
+                                .foregroundStyle(GXTheme.secondaryText)
+                        }
+                    }
+                    if let remarks = group.primary?.remarks, !remarks.isEmpty {
+                        Text(remarks)
+                            .font(.caption2)
+                            .foregroundStyle(GXTheme.secondaryText)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(GXTheme.secondaryText)
+            }
+            .gxCard(padding: 10, radius: 14)
+        }
+        .buttonStyle(.plain)
     }
 
     private var sourceFilterStrip: some View {

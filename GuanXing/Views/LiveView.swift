@@ -10,6 +10,8 @@ final class LiveModel {
     var isLoading = false
     var errorMessages: [String] = []
     var hasLoaded = false
+    /// 刷新失败时保留了上一次的频道列表，界面上提示用户。
+    var keptStaleChannels = false
     private var storedApp: AppModel?
 
     func bind(_ app: AppModel) {
@@ -37,12 +39,20 @@ final class LiveModel {
         isLoading = true
         errorMessages = []
         defer { isLoading = false }
+        let previous = channels
         let result = await LiveService.loadAll(sources: sources)
-        channels = result.channels
         errorMessages = result.errors
+        if result.channels.isEmpty, !previous.isEmpty {
+            // 刷新失败时保留已有频道，避免一次网络抖动就把列表清空。
+            channels = previous
+            keptStaleChannels = true
+        } else {
+            channels = result.channels
+            keptStaleChannels = false
+        }
         hasLoaded = true
-        if selectedGroup == nil, let first = groups.first?.0 {
-            selectedGroup = first
+        if selectedGroup == nil || !groups.contains(where: { $0.0 == selectedGroup }) {
+            selectedGroup = groups.first?.0
         }
     }
 
@@ -68,7 +78,7 @@ struct LiveView: View {
                     EmptyViewState(
                         icon: "antenna.radiowaves.left.and.right.slash",
                         title: "没有可用频道",
-                        message: model.errorMessages.first ?? "在设置中导入 M3U 直播源后即可观看。",
+                        message: model.errorMessages.first ?? "在源管理导入 M3U / TXT / JSON 直播源后即可观看。",
                         actionTitle: "管理直播源"
                     ) {
                         router.push(.sourceManager)
@@ -264,9 +274,12 @@ struct LiveView: View {
 
     private var errorNotice: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("部分直播源加载失败", systemImage: "exclamationmark.circle")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(GXTheme.gold)
+            Label(
+                model.keptStaleChannels ? "刷新失败，仍在显示上次的频道" : "部分直播源加载失败",
+                systemImage: "exclamationmark.circle"
+            )
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(GXTheme.gold)
             ForEach(model.errorMessages, id: \.self) { message in
                 Text(message)
                     .font(.caption2)
@@ -279,7 +292,7 @@ struct LiveView: View {
     private var loading: some View {
         VStack(spacing: 10) {
             ProgressView().tint(GXTheme.gold)
-            Text("正在加载 M3U 频道…")
+            Text("正在加载直播频道…")
                 .font(.caption)
                 .foregroundStyle(GXTheme.secondaryText)
         }

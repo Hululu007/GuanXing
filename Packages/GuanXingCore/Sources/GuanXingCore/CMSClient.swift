@@ -341,3 +341,48 @@ public enum SearchService {
         return (items, outcomes)
     }
 }
+
+/// 把同一部片在不同源的结果合并成一条，借鉴 DpadTV 的“按标题分组 + 源数量”展示。
+public struct TitleGroup: Identifiable, Sendable {
+    public var title: String
+    public var items: [VodItem]
+
+    public var id: String { TextSanitizer.normalizedTitle(title) }
+    public var sourceCount: Int { Set(items.map(\.sourceID)).count }
+    public var primary: VodItem? {
+        items.max { lhs, rhs in
+            (Double(lhs.score ?? "") ?? 0) < (Double(rhs.score ?? "") ?? 0)
+        } ?? items.first
+    }
+
+    public init(title: String, items: [VodItem]) {
+        self.title = title
+        self.items = items
+    }
+}
+
+public enum TitleGrouper {
+    /// 片名归一化后相同的条目合并，组内保留搜索结果原有顺序。
+    public static func group(_ items: [VodItem]) -> [TitleGroup] {
+        var order: [String] = []
+        var buckets: [String: [VodItem]] = [:]
+        for item in items {
+            let key = TextSanitizer.normalizedTitle(item.name)
+            guard !key.isEmpty else { continue }
+            if buckets[key] == nil {
+                buckets[key] = []
+                order.append(key)
+            }
+            buckets[key]?.append(item)
+        }
+        return order.compactMap { key in
+            guard let list = buckets[key], let first = list.first else { return nil }
+            return TitleGroup(title: first.name, items: list)
+        }
+        .sorted { lhs, rhs in
+            if lhs.sourceCount != rhs.sourceCount { return lhs.sourceCount > rhs.sourceCount }
+            if lhs.items.count != rhs.items.count { return lhs.items.count > rhs.items.count }
+            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+        }
+    }
+}

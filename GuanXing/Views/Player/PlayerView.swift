@@ -190,9 +190,17 @@ struct PlayerView: View {
             Spacer()
 
             VStack(spacing: 4) {
-                HStack {
+                HStack(spacing: 8) {
                     Text(timeText(dragPosition ?? model.position))
                     Spacer()
+                    if !model.bufferedText.isEmpty {
+                        Text(model.bufferedText)
+                            .foregroundStyle(GXTheme.gold.opacity(0.85))
+                    }
+                    if model.bitrateKbps > 0 {
+                        Text("\(model.bitrateKbps) kbps")
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
                     Text(timeText(model.duration))
                 }
                 .font(.caption2.monospacedDigit())
@@ -202,8 +210,14 @@ struct PlayerView: View {
                     let progress = model.duration > 0
                         ? min(max((dragPosition ?? model.position) / model.duration, 0), 1)
                         : 0
+                    let bufferedRatio = model.duration > 0
+                        ? min(max(model.bufferedDuration / model.duration, 0), 1)
+                        : 0
                     ZStack(alignment: .leading) {
                         Capsule().fill(Color.white.opacity(0.24)).frame(height: 4)
+                        Capsule()
+                            .fill(Color.white.opacity(0.42))
+                            .frame(width: max(0, proxy.size.width * bufferedRatio), height: 4)
                         Capsule().fill(GXTheme.gold).frame(width: max(0, proxy.size.width * progress), height: 4)
                         Circle()
                             .fill(GXTheme.gold)

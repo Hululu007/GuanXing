@@ -105,8 +105,8 @@ final class AppModel {
     }
 
     func importLocalPlaylist(text: String, name: String) throws {
-        guard ConfigLoader.looksLikeM3U(text) else {
-            throw GuanXingError.decode("文件不是 M3U 播放列表")
+        guard let format = LivePlaylist.detect(text) else {
+            throw GuanXingError.decode("文件不是 M3U / TXT / JSON 直播列表")
         }
         let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -114,32 +114,41 @@ final class AppModel {
         let folder = root.appendingPathComponent("GuanXing/Playlists", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let fileStem = StableID.make("playlist", text)
-        let fileURL = folder.appendingPathComponent(fileStem + ".m3u")
+        let fileURL = folder.appendingPathComponent(fileStem + "." + format.fileExtension)
         if liveSources.contains(where: { $0.url == fileURL.absoluteString }) {
             throw ImportError.duplicate
         }
         let sourceID = StableID.make("live", fileURL.absoluteString)
-        let channels = M3UParser.parse(
+        let sourceTitle = displayName.isEmpty ? "本地列表" : displayName
+        let result = LivePlaylist.parse(
             text,
             sourceID: sourceID,
-            sourceName: displayName.isEmpty ? "本地列表" : displayName
+            sourceName: sourceTitle
         )
-        guard !channels.isEmpty else {
+        guard let channels = result?.channels, !channels.isEmpty else {
             throw ImportError.noUsableSource
         }
         try text.write(to: fileURL, atomically: true, encoding: .utf8)
 
         let source = LiveSource(
             id: sourceID,
-            name: displayName.isEmpty ? "本地列表" : displayName,
+            name: sourceTitle,
             url: fileURL.absoluteString,
             origin: .manual
         )
         liveSources.append(source)
         save()
+        var detail = [format.title]
+        if let alternates = result?.alternateURLCount, alternates > 0 {
+            detail.append("忽略 \(alternates) 个备用地址")
+        }
+        if let skipped = result?.skippedLineCount, skipped > 0 {
+            detail.append("跳过 \(skipped) 行")
+        }
         importMessage = ImportAlert(
             title: "已导入",
-            message: "本地直播列表已加入源管理，共 \(channels.count) 个频道。"
+            message: "本地直播列表已加入源管理，共 \(channels.count) 个频道。",
+            detail: detail.joined(separator: " · ")
         )
     }
 
