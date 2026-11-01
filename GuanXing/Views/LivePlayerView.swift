@@ -24,7 +24,6 @@ struct LivePlayerView: View {
                 if fullscreen {
                     playerArea
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    Spacer(minLength: 0)
                 } else {
                     playerArea
                         .aspectRatio(16.0 / 9.0, contentMode: .fit)
@@ -37,6 +36,7 @@ struct LivePlayerView: View {
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(fullscreen)
+        .ignoresSafeArea(edges: fullscreen ? Edge.Set.all : Edge.Set())
         .onAppear {
             load()
         }
@@ -48,7 +48,7 @@ struct LivePlayerView: View {
 
     private var playerArea: some View {
         ZStack {
-            PlayerSurface(player: player)
+            PlayerSurface(player: player, fill: fullscreen)
             if isLoading {
                 ProgressView().tint(.white).scaleEffect(1.2)
             }
