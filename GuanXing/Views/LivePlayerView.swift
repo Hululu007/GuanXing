@@ -25,13 +25,14 @@ struct LivePlayerView: View {
                     if !fullscreen {
                         topBar
                     }
-                    if fullscreen {
-                        playerArea
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        playerArea
-                            .frame(width: proxy.size.width, height: proxy.size.width * 9.0 / 16.0)
-                    }
+                    // 同样只改尺寸不换分支，避免全屏切换时重建播放图层。
+                    playerArea
+                        .frame(
+                            width: proxy.size.width,
+                            height: fullscreen
+                                ? proxy.size.height
+                                : proxy.size.width * 9.0 / 16.0
+                        )
                     if !fullscreen {
                         infoPanel
                         Spacer(minLength: 0)

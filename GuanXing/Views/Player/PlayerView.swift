@@ -29,6 +29,7 @@ struct PlayerView: View {
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(model?.isFullscreen ?? false)
         .onAppear {
+            WindowBackdrop.installBlack()
             if model == nil, let source = app.source(for: launch.item.sourceID) {
                 model = PlayerModel(
                     launch: launch,
@@ -42,6 +43,7 @@ struct PlayerView: View {
             Task { await model?.prepare() }
         }
         .onDisappear {
+            WindowBackdrop.restore()
             saveProgress()
             model?.teardown()
             // 把手势改过的亮度还原成进入播放器前的值。
@@ -67,13 +69,16 @@ struct PlayerView: View {
                     if !model.isFullscreen {
                         topBar(model)
                     }
-                    if model.isFullscreen {
-                        videoArea(model)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        videoArea(model)
-                            .frame(width: proxy.size.width, height: proxy.size.width * 9.0 / 16.0)
-                    }
+                    // 只改尺寸、不换分支：videoArea 始终占同一个结构位置。
+                    // 用 if/else 切成两套布局会改变视图身份，AVPlayerLayer 被整块重建，
+                    // 表现就是切全屏黑屏一次。
+                    videoArea(model)
+                        .frame(
+                            width: proxy.size.width,
+                            height: model.isFullscreen
+                                ? proxy.size.height
+                                : proxy.size.width * 9.0 / 16.0
+                        )
                     if !model.isFullscreen {
                         episodePanel(model)
                         Spacer(minLength: 0)
@@ -85,8 +90,6 @@ struct PlayerView: View {
         }
         .background(Color.black)
         .persistentSystemOverlays(model.isFullscreen ? .hidden : .automatic)
-        .onAppear { WindowBackdrop.installBlack() }
-        .onDisappear { WindowBackdrop.restore() }
     }
 
     private func topBar(_ model: PlayerModel) -> some View {
@@ -331,9 +334,11 @@ struct PlayerView: View {
 
     /// 全屏时避开刘海与底部指示条，竖屏时不需要额外内边距。
     /// 注意 .safeAreaPadding 只加在控件层，视频画面仍然整屏铺满。
+    /// 全屏后整块区域已经 ignoresSafeArea，系统安全区读数会变成 0，
+    /// 所以这里必须手动留出横屏刘海（约 47pt）和底部指示条的宽度。
     private func controlInsets(_ model: PlayerModel) -> EdgeInsets {
         model.isFullscreen
-            ? EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
+            ? EdgeInsets(top: 10, leading: 44, bottom: 14, trailing: 44)
             : EdgeInsets()
     }
 

@@ -123,6 +123,9 @@ struct HomeView: View {
                 .frame(width: outer.size.width, alignment: .leading)
             }
             .scrollIndicators(.hidden)
+            .refreshable {
+                await model.refresh()
+            }
         }
         .background {
             ZStack {
@@ -134,9 +137,6 @@ struct HomeView: View {
         .task {
             model.bind(app)
             await model.load(app: app)
-        }
-        .refreshable {
-            await model.refresh()
         }
     }
 
