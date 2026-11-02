@@ -5,7 +5,7 @@ final class BuiltinCatalogTests: XCTestCase {
 
     func testCatalogIsNotEmptyAndAllBuiltin() {
         XCTAssertFalse(BuiltinSources.vod.isEmpty)
-        XCTAssertEqual(BuiltinSources.vod.count, 43)
+        XCTAssertEqual(BuiltinSources.vod.count, 46)
         XCTAssertTrue(BuiltinSources.vod.allSatisfy { $0.origin == .builtin })
         XCTAssertTrue(BuiltinSources.vod.allSatisfy { $0.isEnabled })
         XCTAssertTrue(BuiltinSources.vod.allSatisfy { !$0.isAdult })
@@ -44,7 +44,34 @@ final class BuiltinCatalogTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(Set(hosts).count, BuiltinSources.vod.count / 2)
     }
 
-    func testLiveCatalog() {
+    /// 直播源目录只放实测能打开的列表，且必须覆盖国内与多地区。
+    func testLiveCatalogEntriesLookValid() {
+        for source in BuiltinSources.live {
+            XCTAssertTrue(source.url.lowercased().hasPrefix("https://"), source.name)
+            XCTAssertTrue(
+                source.url.lowercased().hasSuffix(".m3u")
+                    || source.url.lowercased().hasSuffix(".m3u8")
+                    || source.url.lowercased().hasSuffix(".txt"),
+                source.name + " 不是可识别的播放列表地址: " + source.url
+            )
+        }
+        XCTAssertTrue(BuiltinSources.live.contains { $0.name.contains("中国") })
+    }
+
+    /// 删除内置直播源后，「更新内置源」不能把它重新加回来。
+    func testDeletedBuiltinLiveSourceIsNotRestored() {
+        let target = BuiltinSources.live[0]
+        let blocked = Set([target.id])
+        var live = BuiltinSources.live.filter { !blocked.contains($0.id) }
+        for source in BuiltinSources.live where !blocked.contains(source.id) {
+            if !live.contains(where: { $0.url == source.url }) { live.append(source) }
+        }
+        XCTAssertFalse(live.contains { $0.id == target.id })
+        XCTAssertEqual(live.count, BuiltinSources.live.count - 1)
+    }
+
+    func testLiveCatalogIsBroadAndUnique() {
+        XCTAssertGreaterThanOrEqual(BuiltinSources.live.count, 20)
         XCTAssertFalse(BuiltinSources.live.isEmpty)
         XCTAssertTrue(BuiltinSources.live.allSatisfy { $0.origin == .builtin })
         let urls = BuiltinSources.live.map(\.url)
@@ -73,7 +100,7 @@ final class BuiltinCatalogTests: XCTestCase {
 
     func testCatalogVersionMatchesVerifiedDate() {
         XCTAssertEqual(BuiltinSources.verifiedAt, "2026-11-02")
-        XCTAssertEqual(BuiltinSources.catalogVersion, "2026.11.02")
+        XCTAssertEqual(BuiltinSources.catalogVersion, "2026.11.02.3")
         XCTAssertGreaterThanOrEqual(BuiltinSources.verifiedAvailableCount, BuiltinSources.vod.count)
         XCTAssertGreaterThanOrEqual(BuiltinSources.verifiedCandidateCount, BuiltinSources.verifiedAvailableCount)
     }

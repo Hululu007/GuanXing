@@ -12,16 +12,16 @@ public enum BuiltinSources {
     public static let verifiedAt = "2026-11-02"
 
     /// 内置源目录版本；目录变动时改这个值，App 会提示可更新。
-    public static let catalogVersion = "2026.11.02"
+    public static let catalogVersion = "2026.11.02.3"
 
     /// 本次验证覆盖的候选接口数（juwanhezi 三类清单 + GitHub 同类配置）。
-    public static let verifiedCandidateCount = 101
+    public static let verifiedCandidateCount = 110
 
-    /// 要求片单可用且能拿到真实播放地址的数量（标准 CMS 37 + APP 采集 6）。
-    public static let verifiedAvailableCount = 43
+    /// 要求片单可用且能拿到真实播放地址的数量（标准 CMS 40 + APP 采集 6）。
+    public static let verifiedAvailableCount = 46
 
     /// 实测能直接加载视频流的数量（余下为片单可用、播放链路可拿到但 CDN 对机房 IP 限制）。
-    public static let verifiedMediaCount = 14
+    public static let verifiedMediaCount = 23
 
     public static let vod: [VodSource] = [
         VodSource(
@@ -247,6 +247,24 @@ public enum BuiltinSources {
             origin: .builtin
         ),
         VodSource(
+            id: "builtin_piaoling",
+            name: "飘零影院",
+            api: "https://p2100.net/api.php/provide/vod",
+            origin: .builtin
+        ),
+        VodSource(
+            id: "builtin_baidu",
+            name: "百度资源",
+            api: "https://api.apibdzy.com/api.php/provide/vod",
+            origin: .builtin
+        ),
+        VodSource(
+            id: "builtin_chuangxiang",
+            name: "创享资源",
+            api: "https://ys.cxkjg.cn/api/provide/vod",
+            origin: .builtin
+        ),
+        VodSource(
             id: "builtin_app_wangzi",
             name: "王子 APP",
             api: "https://app.95112475.xyz",
@@ -296,15 +314,135 @@ public enum BuiltinSources {
 
     public static let live: [LiveSource] = [
         LiveSource(
-            id: "builtin_live_iptvorg",
+            id: "builtin_live_vbskycn",
+            name: "小雅 IPTV（vbskycn）",
+            url: "https://raw.githubusercontent.com/vbskycn/iptv/master/tv/iptv4.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_vbskycn_txt",
+            name: "小雅 IPTV TXT",
+            url: "https://raw.githubusercontent.com/vbskycn/iptv/master/tv/iptv4.txt",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_cn",
             name: "IPTV-org 中国",
             url: "https://iptv-org.github.io/iptv/countries/cn.m3u",
             origin: .builtin
         ),
         LiveSource(
-            id: "builtin_live_gather",
-            name: "Gather 直播",
-            url: "https://raw.githubusercontent.com/YanG-1989/m3u/main/Gather.m3u",
+            id: "builtin_live_iptvorg_hk",
+            name: "IPTV-org 香港",
+            url: "https://iptv-org.github.io/iptv/countries/hk.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_tw",
+            name: "IPTV-org 台湾",
+            url: "https://iptv-org.github.io/iptv/countries/tw.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_zho",
+            name: "IPTV-org 汉语",
+            url: "https://iptv-org.github.io/iptv/languages/zho.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_jp",
+            name: "IPTV-org 日本",
+            url: "https://iptv-org.github.io/iptv/countries/jp.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_kr",
+            name: "IPTV-org 韩国",
+            url: "https://iptv-org.github.io/iptv/countries/kr.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_sg",
+            name: "IPTV-org 新加坡",
+            url: "https://iptv-org.github.io/iptv/countries/sg.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_th",
+            name: "IPTV-org 泰国",
+            url: "https://iptv-org.github.io/iptv/countries/th.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_vn",
+            name: "IPTV-org 越南",
+            url: "https://iptv-org.github.io/iptv/countries/vn.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_ph",
+            name: "IPTV-org 菲律宾",
+            url: "https://iptv-org.github.io/iptv/countries/ph.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_us",
+            name: "IPTV-org 美国",
+            url: "https://iptv-org.github.io/iptv/countries/us.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_uk",
+            name: "IPTV-org 英国",
+            url: "https://iptv-org.github.io/iptv/countries/uk.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_ca",
+            name: "IPTV-org 加拿大",
+            url: "https://iptv-org.github.io/iptv/countries/ca.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_au",
+            name: "IPTV-org 澳洲",
+            url: "https://iptv-org.github.io/iptv/countries/au.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_de",
+            name: "IPTV-org 德国",
+            url: "https://iptv-org.github.io/iptv/countries/de.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_iptvorg_fr",
+            name: "IPTV-org 法国",
+            url: "https://iptv-org.github.io/iptv/countries/fr.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_freeview_cn",
+            name: "Free-TV 中国",
+            url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_china.m3u8",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_guovin",
+            name: "Guovin 直播",
+            url: "https://raw.githubusercontent.com/Guovin/iptv-api/gd/output/result.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_kimentanm",
+            name: "Kimentanm 直播",
+            url: "https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u",
+            origin: .builtin
+        ),
+        LiveSource(
+            id: "builtin_live_fanmingming",
+            name: "Fanmingming 直播",
+            url: "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv6.m3u",
             origin: .builtin
         )
     ]

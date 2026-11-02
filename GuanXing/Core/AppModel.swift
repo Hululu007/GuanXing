@@ -214,6 +214,11 @@ final class AppModel {
         if source.url.hasPrefix("file://"), let url = URL(string: source.url) {
             try? FileManager.default.removeItem(at: url)
         }
+        // 内置直播源删除后同样记一笔，避免「更新内置源」又把它加回来。
+        if BuiltinSources.live.contains(where: { $0.id == source.id }),
+           !settings.removedBuiltinSourceIDs.contains(source.id) {
+            settings.removedBuiltinSourceIDs.append(source.id)
+        }
         save()
     }
 
@@ -260,9 +265,18 @@ final class AppModel {
             health[source.id] = nil
         }
 
-        let liveExisting = Set(liveSources.map(\.url))
-        for source in BuiltinSources.live where !liveExisting.contains(source.url) {
+        var liveExisting = Set(liveSources.map(\.url))
+        for source in BuiltinSources.live where !allowed.contains(source.id) {
+            guard !liveExisting.contains(source.url) else { continue }
             liveSources.append(source)
+            liveExisting.insert(source.url)
+        }
+        // 目录里下线的内置直播源一并移出，避免留下一打开就报错的条目。
+        let liveCatalogIDs = Set(BuiltinSources.live.map(\.id))
+        liveSources.removeAll { source in
+            source.origin == .builtin
+                && !liveCatalogIDs.contains(source.id)
+                && !source.url.hasPrefix("file://")
         }
 
         settings.builtinCatalogVersion = BuiltinSources.catalogVersion
