@@ -5,7 +5,7 @@ import Foundation
 /// 界面层只依赖这个，不需要知道某个源背后到底是什么协议。
 public struct SourceClient: Sendable {
     public let source: VodSource
-    private let timeout: TimeInterval
+    let timeout: TimeInterval
 
     public init(source: VodSource, timeout: TimeInterval = 15) {
         self.source = source

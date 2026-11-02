@@ -24,7 +24,7 @@ public struct AppCmsSpider: Sendable {
     public let source: VodSource
     public let kind: Kind
     public let config: AppCmsConfig
-    private let timeout: TimeInterval
+    let timeout: TimeInterval
 
     public init(source: VodSource, kind: Kind, config: AppCmsConfig, timeout: TimeInterval = 20) {
         self.source = source
