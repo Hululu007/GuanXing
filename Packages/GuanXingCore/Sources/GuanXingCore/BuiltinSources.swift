@@ -17,8 +17,8 @@ public enum BuiltinSources {
     /// 本次验证覆盖的候选接口数（juwanhezi 三类清单 + GitHub 同类配置）。
     public static let verifiedCandidateCount = 101
 
-    /// 要求片单可用且能拿到真实播放地址的数量。
-    public static let verifiedAvailableCount = 37
+    /// 要求片单可用且能拿到真实播放地址的数量（标准 CMS 37 + APP 采集 6）。
+    public static let verifiedAvailableCount = 43
 
     /// 实测能直接加载视频流的数量（余下为片单可用、播放链路可拿到但 CDN 对机房 IP 限制）。
     public static let verifiedMediaCount = 14
