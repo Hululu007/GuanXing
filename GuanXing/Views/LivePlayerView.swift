@@ -19,36 +19,39 @@ struct LivePlayerView: View {
             Color.black.ignoresSafeArea()
             // 与点播播放器一致：用几何值算尺寸，不靠 if/else 换布局，
             // 否则切全屏时 PlayerSurface 会被重建，表现为黑屏或画面不铺满。
+            // .ignoresSafeArea 必须挂在 GeometryReader 上，量到的才是整屏尺寸。
             GeometryReader { proxy in
                 VStack(spacing: 0) {
                     if !fullscreen {
                         topBar
                     }
-                    playerArea
-                        .frame(
-                            width: proxy.size.width,
-                            height: fullscreen
-                                ? proxy.size.height
-                                : proxy.size.width * 9.0 / 16.0
-                        )
+                    if fullscreen {
+                        playerArea
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        playerArea
+                            .frame(width: proxy.size.width, height: proxy.size.width * 9.0 / 16.0)
+                    }
                     if !fullscreen {
                         infoPanel
                         Spacer(minLength: 0)
                     }
                 }
-                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
+            .ignoresSafeArea(edges: fullscreen ? Edge.Set.all : Edge.Set())
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .statusBarHidden(fullscreen)
-        .ignoresSafeArea(edges: fullscreen ? Edge.Set.all : Edge.Set())
         .onAppear {
+            WindowBackdrop.installBlack()
             load()
         }
         .onDisappear {
             player.pause()
+            WindowBackdrop.restore()
             OrientationHelper.lockPortrait()
         }
     }

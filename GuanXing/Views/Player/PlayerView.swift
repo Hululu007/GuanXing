@@ -56,29 +56,37 @@ struct PlayerView: View {
     private func content(_ model: PlayerModel) -> some View {
         // 视频层的尺寸用几何值显式算，而不是 if/else 切换两套布局。
         // 后者会改变视图身份、让 AVPlayerLayer 整块重建，表现为黑屏或画面不铺满。
-        GeometryReader { proxy in
-            VStack(spacing: 0) {
-                if !model.isFullscreen {
-                    topBar(model)
+        //
+        // 关键点：.ignoresSafeArea 必须直接挂在 GeometryReader 上。
+        // 挂在外面时 GeometryReader 量到的是「扣掉安全区」的尺寸，
+        // 全屏就变成一块比屏幕小的居中画面，四周露出上一页，看起来像加了个边框。
+        ZStack {
+            Color.black.ignoresSafeArea()
+            GeometryReader { proxy in
+                VStack(spacing: 0) {
+                    if !model.isFullscreen {
+                        topBar(model)
+                    }
+                    if model.isFullscreen {
+                        videoArea(model)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        videoArea(model)
+                            .frame(width: proxy.size.width, height: proxy.size.width * 9.0 / 16.0)
+                    }
+                    if !model.isFullscreen {
+                        episodePanel(model)
+                        Spacer(minLength: 0)
+                    }
                 }
-                videoArea(model)
-                    .frame(
-                        width: proxy.size.width,
-                        height: model.isFullscreen
-                            ? proxy.size.height
-                            : proxy.size.width * 9.0 / 16.0
-                    )
-                if !model.isFullscreen {
-                    episodePanel(model)
-                    Spacer(minLength: 0)
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-            .background(Color.black)
+            .ignoresSafeArea(edges: model.isFullscreen ? .all : [])
         }
         .background(Color.black)
-        .ignoresSafeArea(edges: model.isFullscreen ? .all : [])
         .persistentSystemOverlays(model.isFullscreen ? .hidden : .automatic)
+        .onAppear { WindowBackdrop.installBlack() }
+        .onDisappear { WindowBackdrop.restore() }
     }
 
     private func topBar(_ model: PlayerModel) -> some View {
@@ -466,6 +474,37 @@ struct PlayerView: View {
     }
 }
 
+/// 播放页要把窗口底色压成纯黑。
+/// 播放器是全屏推入 NavigationStack 的，但窗口根视图仍带着上层页面的背景色，
+/// 只要播放视图有一点内缩（安全区、转角、转场），边缘就会露出那层颜色，
+/// 在深色画面上就是一圈「边框」。
+@MainActor
+enum WindowBackdrop {
+    private static var previousColor: UIColor?
+
+    static func installBlack() {
+        guard let window = keyWindow else { return }
+        if previousColor == nil {
+            previousColor = window.backgroundColor
+        }
+        window.backgroundColor = .black
+    }
+
+    static func restore() {
+        guard let window = keyWindow, let previousColor else { return }
+        window.backgroundColor = previousColor
+        WindowBackdrop.previousColor = nil
+    }
+
+    private static var keyWindow: UIWindow? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }
+    }
+}
+
 struct PlayerSurface: UIViewRepresentable {
     let player: AVPlayer
     /// 全屏时按屏幕比例铺满（会裁掉少量边缘），竖屏时保持完整画面。
@@ -494,6 +533,10 @@ struct PlayerSurface: UIViewRepresentable {
             super.init(frame: frame)
             backgroundColor = .black
             playerLayer.videoGravity = .resizeAspect
+            // 画面必须严格限制在自己的 frame 内，图层溢出到父视图外时
+            // 会和底层的黑色背景之间出现一条肉眼可见的缝。
+            clipsToBounds = true
+            playerLayer.masksToBounds = true
         }
 
         required init?(coder: NSCoder) {

@@ -308,7 +308,7 @@ struct SearchView: View {
                     groupedResults
                 } else {
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 108), spacing: 12)],
+                        columns: [GridItem(.adaptive(minimum: 104, maximum: 168), spacing: 10)],
                         spacing: 18
                     ) {
                         ForEach(model.filteredItems) { item in
@@ -469,7 +469,7 @@ struct SearchView: View {
                     .foregroundStyle(GXTheme.secondaryText)
             }
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 108), spacing: 12)],
+                columns: [GridItem(.adaptive(minimum: 104, maximum: 168), spacing: 10)],
                 spacing: 18
             ) {
                 ForEach(0..<6, id: \.self) { _ in

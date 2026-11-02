@@ -104,20 +104,26 @@ struct HomeView: View {
     @State private var model = HomeModel()
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 24) {
-                header
-                hero
-                quickStats
-                categoryStrip
-                content
-                sourceShelf
+        // 用几何值把内容宽度钉死在屏幕宽度上。
+        // 之前只有 .padding(.horizontal, 18)，一旦有子视图报出比视口更宽的尺寸，
+        // LazyVStack 就会变宽并被居中，表现就是左右两边各被裁掉一截。
+        GeometryReader { outer in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 24) {
+                    header
+                    hero
+                    quickStats
+                    categoryStrip
+                    content
+                    sourceShelf
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 8)
+                .padding(.bottom, 32)
+                .frame(width: outer.size.width, alignment: .leading)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 8)
-            .padding(.bottom, 32)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
         .background {
             ZStack {
                 GXTheme.heroGradient.ignoresSafeArea()
@@ -330,7 +336,7 @@ struct HomeView: View {
 
     private func posterGrid(_ items: [VodItem]) -> some View {
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 108), spacing: 12)],
+            columns: [GridItem(.adaptive(minimum: 104, maximum: 168), spacing: 10)],
             spacing: 18
         ) {
             ForEach(items) { item in
@@ -348,49 +354,65 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(
                 title: "我的片源",
-                subtitle: "导入 TVBox / LibreTV 配置，扩展可搜索范围",
+                subtitle: "共 \(app.sources.count) 个，点一下切换当前源",
                 actionTitle: "管理"
             ) {
                 router.push(.sourceManager)
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(app.sources.prefix(12)) { source in
-                        Button {
-                            model.select(sourceID: source.id)
-                            Task { await model.load(app: app, force: true) }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 7) {
-                                HStack {
-                                    Text(source.name)
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundStyle(.white)
-                                        .lineLimit(1)
-                                    Spacer(minLength: 3)
-                                    Image(systemName: source.isEnabled ? "checkmark.circle.fill" : "circle")
-                                        .font(.caption)
-                                        .foregroundStyle(source.isEnabled ? GXTheme.success : GXTheme.secondaryText)
-                                }
-                                Text(source.host)
-                                    .font(.caption2)
-                                    .foregroundStyle(GXTheme.secondaryText)
-                                    .lineLimit(1)
-                                SourceHealthBadge(health: app.health[source.id])
-                            }
-                            .frame(width: 148, alignment: .leading)
-                            .gxCard(padding: 12, radius: 14)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(
-                                        model.selectedSourceID == source.id ? GXTheme.gold.opacity(0.8) : Color.clear,
-                                        lineWidth: 1.5
-                                    )
-                            )
-                        }
-                        .buttonStyle(.plain)
+            if app.sources.isEmpty {
+                EmptyViewState(
+                    icon: "antenna.radiowaves.left.and.right.slash",
+                    title: "还没有片源",
+                    message: "去「管理」里导入 TVBox / LibreTV 配置，或恢复内置源目录。",
+                    actionTitle: "去管理"
+                ) {
+                    router.push(.sourceManager)
+                }
+            } else {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 10), count: 2),
+                    spacing: 10
+                ) {
+                    ForEach(app.sources) { source in
+                        sourceCard(source)
                     }
                 }
             }
         }
+    }
+
+    private func sourceCard(_ source: VodSource) -> some View {
+        Button {
+            model.select(sourceID: source.id)
+            Task { await model.load(app: app, force: true) }
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 4) {
+                    Text(source.name)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Spacer(minLength: 2)
+                    Image(systemName: source.isEnabled ? "checkmark.circle.fill" : "circle")
+                        .font(.caption)
+                        .foregroundStyle(source.isEnabled ? GXTheme.success : GXTheme.secondaryText)
+                }
+                Text(source.host)
+                    .font(.caption2)
+                    .foregroundStyle(GXTheme.secondaryText)
+                    .lineLimit(1)
+                SourceHealthBadge(health: app.health[source.id])
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .gxCard(padding: 12, radius: 14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(
+                        model.selectedSourceID == source.id ? GXTheme.gold.opacity(0.8) : Color.clear,
+                        lineWidth: 1.5
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
 }

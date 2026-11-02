@@ -102,40 +102,37 @@ struct PosterCard: View {
     var width: CGFloat?
     var showSource = true
 
+    private let ratio: CGFloat = 0.7
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .topLeading) {
-                RemoteImage(url: item.pic)
-                    .frame(width: width, height: width.map { $0 * 1.42 } ?? 210)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                if let score = item.score, !score.isEmpty, score != "0.0", score != "0" {
-                    Text(score)
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(Color.black.opacity(0.78))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(GXTheme.gold, in: Capsule())
-                        .padding(7)
-                }
-                if let remarks = item.remarks, !remarks.isEmpty {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Text(remarks)
-                                .font(.caption2.weight(.medium))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 4)
-                                .background(.black.opacity(0.62), in: Capsule())
-                            Spacer(minLength: 0)
-                        }
-                        .padding(7)
+            // 海报宽度永远等于父级给的列宽，高度按 0.7 的宽高比推出来。
+            // 之前写死 210pt：列宽一旦小于 148pt，.fill 就会把左右裁掉，
+            // 首页第一列贴屏幕边，看起来就是「边缘显示不全」。
+            poster
+                .overlay(alignment: .topLeading) {
+                    if let score = item.score, !score.isEmpty, score != "0.0", score != "0" {
+                        Text(score)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(Color.black.opacity(0.78))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(GXTheme.gold, in: Capsule())
+                            .padding(7)
                     }
-                    .frame(height: width.map { $0 * 1.42 } ?? 210)
                 }
-            }
+                .overlay(alignment: .bottomLeading) {
+                    if let remarks = item.remarks, !remarks.isEmpty {
+                        Text(remarks)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.62), in: Capsule())
+                            .padding(7)
+                    }
+                }
             Text(item.name)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.white)
@@ -150,6 +147,28 @@ struct PosterCard: View {
             }
         }
         .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var poster: some View {
+        if let width {
+            posterImage
+                .frame(width: width, height: width / ratio)
+        } else {
+            // 宽度由 Grid 的列决定，这里只负责按比例给出高度。
+            // 换成 RemoteImage 自己的 aspectRatio：它接受外层给的宽度建议，
+            // 再换算成高度，图片永远正好铺满这块区域，不会被裁掉左右任何一边。
+            posterImage
+                .aspectRatio(ratio, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    private var posterImage: some View {
+        RemoteImage(url: item.pic)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

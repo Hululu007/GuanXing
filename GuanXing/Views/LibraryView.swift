@@ -65,7 +65,7 @@ struct LibraryView: View {
                 message: "在详情页点亮星标，想看的片就会出现在这里。"
             )
         } else {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 12)], spacing: 18) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 104, maximum: 168), spacing: 10)], spacing: 18) {
                 ForEach(app.favorites) { favorite in
                     Button {
                         router.push(.detail(favorite.item))
