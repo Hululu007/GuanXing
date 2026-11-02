@@ -103,6 +103,14 @@ final class RuleDSLTests: XCTestCase {
     func testExtractIDFallsBackToName() {
         XCTAssertEqual(RuleDSL.extractID("https://a.com/about", fallback: "备用名"), "备用名")
     }
+
+    func testExtractIDHandlesSingleDigitPath() {
+        XCTAssertEqual(RuleDSL.extractID("/d/9.html", fallback: "甲"), "9")
+    }
+
+    func testExtractIDHandlesAlphanumericSlug() {
+        XCTAssertEqual(RuleDSL.extractID("https://a.com/v/abc123", fallback: "名"), "abc123")
+    }
 }
 
 final class RuleSpiderTests: XCTestCase {
@@ -129,8 +137,8 @@ final class RuleSpiderTests: XCTestCase {
 
     func testParseListProducesItems() {
         let html = """
-        <div class="box"><a title="甲" href="/d/1.html" data-src="https://i/a.jpg"><i ep="HD"></i></a></div>
-        <div class="box"><a title="乙" href="/d/2.html" data-src="https://i/b.jpg"><i ep="12集"></i></a></div>
+        <div class="box"><a title="甲" href="/d/1.html" data-src="https://i/a.jpg"><span ep">HD</span></a></div>
+        <div class="box"><a title="乙" href="/d/2.html" data-src="https://i/b.jpg"><span ep">12集</span></a></div>
         """
         let spider = RuleSpider(config: makeConfig(), source: makeSource())
         let page = spider.parseList(html: html, page: 1)
@@ -142,7 +150,7 @@ final class RuleSpiderTests: XCTestCase {
     }
 
     func testParseListResolvesRelativeLinks() {
-        let html = "<div class=\"box\"><a title=\"甲\" href=\"/d/9.html\"></a></div>"
+        let html = "<div class=\"box\"><a title=\"甲\" href=\"/detail/9.html\"></a></div>"
         let spider = RuleSpider(config: makeConfig(), source: makeSource())
         let page = spider.parseList(html: html, page: 1)
         XCTAssertEqual(page.items.first?.vodID, "9")

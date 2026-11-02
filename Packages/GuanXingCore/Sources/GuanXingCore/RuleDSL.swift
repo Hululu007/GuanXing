@@ -40,9 +40,13 @@ public enum RuleDSL {
            !id.isEmpty {
             return id
         }
+        // 路径型 ID：/detail/12345.html、/d/9.html 这类，取最后一段带数字的
         let parts = link.split(whereSeparator: { "/?#&=.".contains($0) }).filter { !$0.isEmpty }
-        for part in parts.reversed() where part.count >= 2 && part.allSatisfy({ $0.isNumber || $0.isLetter }) {
-            if part.contains(where: \.isNumber) { return String(part) }
+        for part in parts.reversed()
+        where part.count <= 32
+            && part.allSatisfy({ $0.isNumber || $0.isLetter })
+            && part.contains(where: \.isNumber) {
+            return String(part)
         }
         return fallback
     }
