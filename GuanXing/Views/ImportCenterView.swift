@@ -336,7 +336,7 @@ struct AboutView: View {
                         .font(.system(size: 30, weight: .bold, design: .serif))
                         .foregroundStyle(.white)
                         .tracking(3)
-                    Text("Version 1.0.0")
+                    Text("Version \(AppVersion.full)")
                         .font(.caption.monospaced())
                         .foregroundStyle(GXTheme.secondaryText)
                 }

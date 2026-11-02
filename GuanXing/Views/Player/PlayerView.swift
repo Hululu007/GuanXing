@@ -54,21 +54,28 @@ struct PlayerView: View {
     }
 
     private func content(_ model: PlayerModel) -> some View {
-        // 视频层必须始终占住同一个结构位置。
-        // 之前用 if/else 切换两套布局，进入全屏时 AVPlayerLayer 会被整块重建，
-        // 表现就是黑屏、或者画面不跟着铺满。
-        VStack(spacing: 0) {
-            if !model.isFullscreen {
-                topBar(model)
+        // 视频层的尺寸用几何值显式算，而不是 if/else 切换两套布局。
+        // 后者会改变视图身份、让 AVPlayerLayer 整块重建，表现为黑屏或画面不铺满。
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                if !model.isFullscreen {
+                    topBar(model)
+                }
+                videoArea(model)
+                    .frame(
+                        width: proxy.size.width,
+                        height: model.isFullscreen
+                            ? proxy.size.height
+                            : proxy.size.width * 9.0 / 16.0
+                    )
+                if !model.isFullscreen {
+                    episodePanel(model)
+                    Spacer(minLength: 0)
+                }
             }
-            videoArea(model)
-                .modifier(VideoAreaLayout(fullscreen: model.isFullscreen))
-            if !model.isFullscreen {
-                episodePanel(model)
-                Spacer(minLength: 0)
-            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .background(Color.black)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
         .ignoresSafeArea(edges: model.isFullscreen ? .all : [])
         .persistentSystemOverlays(model.isFullscreen ? .hidden : .automatic)
@@ -78,6 +85,7 @@ struct PlayerView: View {
         HStack(spacing: 12) {
             Button {
                 saveProgress()
+                forcePortraitIfNeeded()
                 dismiss()
             } label: {
                 Image(systemName: "chevron.left")
@@ -280,13 +288,21 @@ struct PlayerView: View {
                         Image(systemName: model.isFullscreen
                               ? "arrow.down.right.and.arrow.up.left"
                               : "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(.white)
+                            // 图标只有 16pt，必须把命中区域撑到 44pt，
+                            // 否则点偏一点就被下面的手势层吃掉、变成「隐藏控件」。
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                            .background(Color.white.opacity(0.001))
                     }
+                    .buttonStyle(.plain)
                 }
                 .font(.system(size: 15))
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, model.isFullscreen ? 26 : 10)
+            .padding(.bottom, model.isFullscreen ? 26 : 6)
+            .padding(.top, model.isFullscreen ? 0 : 4)
         }
         .background {
             // 背景不参与点击判定，否则会挡住下面的手势层。
@@ -396,12 +412,13 @@ struct PlayerView: View {
     }
 
     private func enterFullscreen(_ model: PlayerModel) {
-        // 先让系统允许横屏，再切布局，避免几何更新被旧 mask 拒绝。
-        OrientationHelper.lockLandscape()
+        // 先切布局再请求旋转：反过来的话画面会先按竖屏几何重算一次，
+        // 旋转完成前那一帧看起来像「没有全屏」。
         withAnimation(.easeInOut(duration: 0.25)) {
             model.isFullscreen = true
             model.controlsVisible = true
         }
+        OrientationHelper.lockLandscape()
         // 重新读一次真实亮度/音量，避免和用户刚在控制中心改过的值不一致。
         model.syncSystemLevels()
         model.showControlsTemporarily()
@@ -414,6 +431,13 @@ struct PlayerView: View {
         }
         model.previewPosition = nil
         OrientationHelper.lockPortrait()
+    }
+
+    /// 允许用户在横屏状态下直接返回上一页，避免退出时卡在横屏。
+    private func forcePortraitIfNeeded() {
+        if OrientationHelper.isLandscape {
+            OrientationHelper.lockPortrait()
+        }
     }
 
     private func saveProgress() {
@@ -438,22 +462,6 @@ struct PlayerView: View {
 
     private func speedLabel(_ value: Double) -> String {
         value == floor(value) ? "\(Int(value))x" : "\(value)x"
-    }
-}
-
-/// 竖屏锁定 16:9 并留黑边，全屏时铺满可用空间。
-/// 用 ViewModifier 而不是 if/else 包住 videoArea，保证视图身份不变、AVPlayerLayer 不被重建。
-private struct VideoAreaLayout: ViewModifier {
-    let fullscreen: Bool
-
-    func body(content: Content) -> some View {
-        if fullscreen {
-            content.frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            content
-                .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-        }
     }
 }
 

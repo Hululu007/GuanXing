@@ -184,7 +184,7 @@ struct SettingsView: View {
             actionCard(
                 icon: "sparkles",
                 title: "关于观星",
-                subtitle: "版本 1.0.0 · 致敬 LibreTV 与 TVBox",
+                subtitle: "版本 \(AppVersion.display) · 致敬 LibreTV 与 TVBox",
                 accent: GXTheme.gold
             ) {
                 router.push(.about)

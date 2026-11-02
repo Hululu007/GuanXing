@@ -17,19 +17,26 @@ struct LivePlayerView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VStack(spacing: 0) {
-                if !fullscreen {
-                    topBar
-                }
-                if fullscreen {
+            // 与点播播放器一致：用几何值算尺寸，不靠 if/else 换布局，
+            // 否则切全屏时 PlayerSurface 会被重建，表现为黑屏或画面不铺满。
+            GeometryReader { proxy in
+                VStack(spacing: 0) {
+                    if !fullscreen {
+                        topBar
+                    }
                     playerArea
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    playerArea
-                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                    infoPanel
-                    Spacer(minLength: 0)
+                        .frame(
+                            width: proxy.size.width,
+                            height: fullscreen
+                                ? proxy.size.height
+                                : proxy.size.width * 9.0 / 16.0
+                        )
+                    if !fullscreen {
+                        infoPanel
+                        Spacer(minLength: 0)
+                    }
                 }
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -98,11 +105,13 @@ struct LivePlayerView: View {
                         Image(systemName: fullscreen
                               ? "arrow.down.right.and.arrow.up.left"
                               : "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 17, weight: .medium))
+                            .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(Color.white.opacity(0.12), in: Circle())
+                            .frame(width: 46, height: 46)
+                            .contentShape(Rectangle())
+                            .background(Color.white.opacity(0.14), in: Circle())
                     }
+                    .buttonStyle(.plain)
                 }
                 .padding(18)
             }
@@ -216,6 +225,7 @@ struct LivePlayerView: View {
         withAnimation(.easeInOut(duration: 0.25)) {
             fullscreen.toggle()
         }
+        // 与点播播放器保持一致：先切布局再请求旋转，避免旋转前重算一次竖屏几何。
         if fullscreen {
             OrientationHelper.lockLandscape()
         } else {
