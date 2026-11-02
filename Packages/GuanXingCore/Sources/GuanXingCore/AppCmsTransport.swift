@@ -93,7 +93,8 @@ public enum AppCmsCrypto {
             throw AppCmsSpider.TransportError(message: "密钥长度不合法")
         }
         let blockSize = 16
-        var output = Data(count: payload.count + blockSize)
+        let capacity = payload.count + blockSize
+        var output = Data(count: capacity)
         var written = 0
         let status = output.withUnsafeMutableBytes { outBytes -> CCCryptorStatus in
             guard let outBase = outBytes.baseAddress else { return CCCryptorStatus(kCCMemoryFailure) }
@@ -107,7 +108,7 @@ public enum AppCmsCrypto {
                             keyBytes.baseAddress, keyData.count,
                             ivBytes.baseAddress,
                             inBytes.baseAddress, payload.count,
-                            outBase, output.count,
+                            outBase, capacity,
                             &written
                         )
                     }

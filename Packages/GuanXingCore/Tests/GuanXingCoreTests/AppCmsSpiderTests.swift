@@ -139,7 +139,8 @@ final class AppCmsSpiderTests: XCTestCase {
         let keyData = Data(key.utf8)
         let ivData = Data(iv.utf8)
         let input = Data(text.utf8)
-        var output = Data(count: input.count + 16)
+        let capacity = input.count + 16
+        var output = Data(count: capacity)
         var written = 0
         let status = output.withUnsafeMutableBytes { outBytes -> CCCryptorStatus in
             guard let outBase = outBytes.baseAddress else { return CCCryptorStatus(kCCMemoryFailure) }
@@ -153,7 +154,7 @@ final class AppCmsSpiderTests: XCTestCase {
                             keyBytes.baseAddress, keyData.count,
                             ivBytes.baseAddress,
                             inBytes.baseAddress, input.count,
-                            outBase, output.count,
+                            outBase, capacity,
                             &written
                         )
                     }
