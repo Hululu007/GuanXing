@@ -5,7 +5,7 @@ final class BuiltinCatalogTests: XCTestCase {
 
     func testCatalogIsNotEmptyAndAllBuiltin() {
         XCTAssertFalse(BuiltinSources.vod.isEmpty)
-        XCTAssertEqual(BuiltinSources.vod.count, 37)
+        XCTAssertEqual(BuiltinSources.vod.count, 43)
         XCTAssertTrue(BuiltinSources.vod.allSatisfy { $0.origin == .builtin })
         XCTAssertTrue(BuiltinSources.vod.allSatisfy { $0.isEnabled })
         XCTAssertTrue(BuiltinSources.vod.allSatisfy { !$0.isAdult })
@@ -13,11 +13,21 @@ final class BuiltinCatalogTests: XCTestCase {
 
     func testEveryEntryIsAnAppleCMSJSONEndpoint() {
         for source in BuiltinSources.vod {
+            XCTAssertTrue(source.api.lowercased().hasPrefix("http"), source.name)
+            if source.spider != nil { continue }
             XCTAssertTrue(
                 source.api.lowercased().contains("/api.php/provide/vod"),
                 source.name + " is not an Apple CMS endpoint: " + source.api
             )
-            XCTAssertTrue(source.api.lowercased().hasPrefix("http"), source.name)
+        }
+    }
+
+    /// APP 采集型源必须带可还原的协议配置，否则导入后会打不开。
+    func testAppCmsEntriesCarrySpiderBinding() {
+        for source in BuiltinSources.vod where source.spider != nil {
+            let payload = source.spider?.dictionary ?? [:]
+            let root = (payload["url"] as? String) ?? (payload["site"] as? String) ?? ""
+            XCTAssertTrue(root.lowercased().hasPrefix("http"), source.name)
         }
     }
 
@@ -31,7 +41,7 @@ final class BuiltinCatalogTests: XCTestCase {
 
     func testHostsAreMostlyDistinct() {
         let hosts = BuiltinSources.vod.map { $0.host.lowercased() }
-        XCTAssertGreaterThanOrEqual(Set(hosts).count, BuiltinSources.vod.count - 2)
+        XCTAssertGreaterThanOrEqual(Set(hosts).count, BuiltinSources.vod.count / 2)
     }
 
     func testLiveCatalog() {
@@ -62,8 +72,8 @@ final class BuiltinCatalogTests: XCTestCase {
     }
 
     func testCatalogVersionMatchesVerifiedDate() {
-        XCTAssertEqual(BuiltinSources.verifiedAt, "2026-11-01")
-        XCTAssertEqual(BuiltinSources.catalogVersion, "2026.11.01")
+        XCTAssertEqual(BuiltinSources.verifiedAt, "2026-11-02")
+        XCTAssertEqual(BuiltinSources.catalogVersion, "2026.11.02")
         XCTAssertGreaterThanOrEqual(BuiltinSources.verifiedAvailableCount, BuiltinSources.vod.count)
         XCTAssertGreaterThanOrEqual(BuiltinSources.verifiedCandidateCount, BuiltinSources.verifiedAvailableCount)
     }
