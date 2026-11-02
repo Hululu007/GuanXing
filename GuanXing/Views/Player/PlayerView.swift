@@ -322,9 +322,10 @@ struct PlayerView: View {
     }
 
     /// 全屏时避开刘海与底部指示条，竖屏时不需要额外内边距。
+    /// 注意 .safeAreaPadding 只加在控件层，视频画面仍然整屏铺满。
     private func controlInsets(_ model: PlayerModel) -> EdgeInsets {
         model.isFullscreen
-            ? EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0)
+            ? EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
             : EdgeInsets()
     }
 
