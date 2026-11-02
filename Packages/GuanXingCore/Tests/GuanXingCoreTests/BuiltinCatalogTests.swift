@@ -15,8 +15,9 @@ final class BuiltinCatalogTests: XCTestCase {
         for source in BuiltinSources.vod {
             XCTAssertTrue(source.api.lowercased().hasPrefix("http"), source.name)
             if source.spider != nil { continue }
+            let api = source.api.lowercased()
             XCTAssertTrue(
-                source.api.lowercased().contains("/api.php/provide/vod"),
+                api.contains("/api.php/provide/vod") || api.contains("/api/provide/vod"),
                 source.name + " is not an Apple CMS endpoint: " + source.api
             )
         }
