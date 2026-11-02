@@ -155,12 +155,12 @@ struct PosterCard: View {
             posterImage
                 .frame(width: width, height: width / ratio)
         } else {
-            // 宽度由 Grid 的列决定，这里只负责按比例给出高度。
-            // 换成 RemoteImage 自己的 aspectRatio：它接受外层给的宽度建议，
-            // 再换算成高度，图片永远正好铺满这块区域，不会被裁掉左右任何一边。
-            posterImage
+            // 宽度直接取 Grid 的列宽，高度由 0.7 的比例换算。
+            // Color.clear 会接受外层给的宽度提案，aspectRatio 再据此定高，
+            // 图片作为 overlay 正好铺满这块区域：宽度不吃掉任何一点。
+            Color.clear
                 .aspectRatio(ratio, contentMode: .fit)
-                .frame(maxWidth: .infinity)
+                .overlay { posterImage }
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
