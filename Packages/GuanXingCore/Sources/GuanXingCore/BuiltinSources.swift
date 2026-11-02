@@ -9,10 +9,10 @@ import Foundation
 public enum BuiltinSources {
 
     /// 最近一次全量验证时间。
-    public static let verifiedAt = "2026-11-01"
+    public static let verifiedAt = "2026-11-02"
 
     /// 内置源目录版本；目录变动时改这个值，App 会提示可更新。
-    public static let catalogVersion = "2026.11.01"
+    public static let catalogVersion = "2026.11.02"
 
     /// 本次验证覆盖的候选接口数（juwanhezi 三类清单 + GitHub 同类配置）。
     public static let verifiedCandidateCount = 101
@@ -246,7 +246,53 @@ public enum BuiltinSources {
             api: "https://api.wujinapi.net/api.php/provide/vod",
             origin: .builtin
         ),
+        VodSource(
+            id: "builtin_app_wangzi",
+            name: "王子 APP",
+            api: "https://app.95112475.xyz",
+            origin: .builtin,
+            spider: SpiderBinding(kind: .appGet, payload: "{\"url\":\"https://app.95112475.xyz\",\"dataKey\":\"5a9w6x58dsq6z3a6\",\"dataIv\":\"5a9w6x58dsq6z3a6\"}")
+        ),
+        VodSource(
+            id: "builtin_app_mifan",
+            name: "米饭动漫",
+            api: "https://get.mymifun.com",
+            origin: .builtin,
+            spider: SpiderBinding(kind: .appGet, payload: "{\"url\":\"https://get.mymifun.com\",\"site\":\"\",\"dataKey\":\"GETMIFUNGEIMIFUN\",\"dataIv\":\"GETMIFUNGEIMIFUN\",\"deviceId\":\"\",\"version\":\"\"}")
+        ),
+        VodSource(
+            id: "builtin_app_fanshu",
+            name: "番薯动漫",
+            api: "https://new.app.bytegooty.com",
+            origin: .builtin,
+            spider: SpiderBinding(kind: .appGet, payload: "{\"url\":\"https://new.app.bytegooty.com\",\"site\":\"\",\"dataKey\":\"N4yj7l7xKxHF4*gz\",\"dataIv\":\"N4yj7l7xKxHF4*gz\",\"deviceId\":\"\",\"version\":\"\",\"ua\":\"\"}")
+        ),
+        VodSource(
+            id: "builtin_app_yuanxiao",
+            name: "元咲动漫",
+            api: "http://cic.aicg.fun",
+            origin: .builtin,
+            spider: SpiderBinding(kind: .appGet, payload: "{\"url\":\"http://cic.aicg.fun\",\"site\":\"\",\"dataKey\":\"2c4h36abd96se10u\",\"dataIv\":\"2c4h36abd96se10u\",\"deviceId\":\"\",\"version\":\"\",\"ua\":\"\"}")
+        ),
+        VodSource(
+            id: "builtin_app_lanying",
+            name: "蓝鹰 APP",
+            api: "http://103.217.190.91:5566",
+            origin: .builtin,
+            spider: SpiderBinding(kind: .appQi, payload: "{\"url\":\"http://103.217.190.91:5566\",\"dataKey\":\"hagYExMdMkeWfemK\",\"dataIv\":\"hagYExMdMkeWfemK\",\"init\":\"initV122\",\"ua\":\"https://9877.kstore.space/okhttp/3.10.0\"}")
+        ),
+        VodSource(
+            id: "builtin_app_rebo",
+            name: "热播 APP",
+            api: "http://v.rbotv.cn",
+            origin: .builtin,
+            spider: SpiderBinding(kind: .appRJ, payload: "{\"url\":\"http://v.rbotv.cn\"}")
+        ),
     ]
+
+    /// APP 采集型源（csp_AppGet / csp_AppQi / csp_AppRJ 的纯 Swift 复刻）。
+    /// 这些不是标准 CMS，接口需要签名与 AES 解密，密钥取自站点 ext。
+    public static let appCms: [VodSource] = vod.filter { $0.spider != nil }
 
     public static let live: [LiveSource] = [
         LiveSource(
@@ -272,8 +318,9 @@ public enum BuiltinSources {
 
     /// 「批量导入」页的预填内容：多仓 + 已实测可用的单仓接口。
     /// 用户可以直接在此基础上删改，导入时会按指纹自动去重。
+    /// APP 采集型源不走这里（它们需要 spider 绑定），由内置目录直接提供。
     public static var batchSeed: String {
-        (repositoryURLs + vod.map(\.api)).joined(separator: "\n")
+        (repositoryURLs + vod.filter { $0.spider == nil }.map(\.api)).joined(separator: "\n")
     }
 
     /// 接口地址或 ID 重复即视为同一个源，用于导入与更新时去重。

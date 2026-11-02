@@ -36,7 +36,7 @@ final class HomeModel {
         errorMessage = nil
         defer { isLoading = false }
         do {
-            let client = CMSClient(source: source)
+            let client = SourceClient(source: source)
             let page = try await client.latest(page: 1)
             let classes: [VodCategory]
             do {
@@ -82,7 +82,7 @@ final class HomeModel {
         defer { isLoading = false }
         sections = [:]
         do {
-            let client = CMSClient(source: source)
+            let client = SourceClient(source: source)
             if category == "全部" {
                 let page = try await client.latest()
                 sections["最新上线"] = page.items

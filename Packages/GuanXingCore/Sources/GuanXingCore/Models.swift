@@ -16,6 +16,8 @@ public struct VodSource: Codable, Hashable, Identifiable, Sendable {
     public var isAdult: Bool
     public var isSearchable: Bool
     public var headers: [String: String]
+    /// 需要专用协议的源（APP 采集 / 规则 DSL）在这里挂一份解析配置。
+    public var spider: SpiderBinding?
     public var createdAt: Date
 
     public init(
@@ -28,6 +30,7 @@ public struct VodSource: Codable, Hashable, Identifiable, Sendable {
         isAdult: Bool = false,
         isSearchable: Bool = true,
         headers: [String: String] = [:],
+        spider: SpiderBinding? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -39,6 +42,7 @@ public struct VodSource: Codable, Hashable, Identifiable, Sendable {
         self.isAdult = isAdult
         self.isSearchable = isSearchable
         self.headers = headers
+        self.spider = spider
         self.createdAt = createdAt
     }
 

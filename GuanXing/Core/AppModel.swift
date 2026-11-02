@@ -474,7 +474,7 @@ final class AppModel {
         await withTaskGroup(of: (String, SourceHealth).self) { group in
             for source in snapshot {
                 group.addTask {
-                    (source.id, await CMSClient(source: source, timeout: 10).healthCheck())
+                    (source.id, await SourceClient(source: source, timeout: 10).healthCheck())
                 }
             }
             for await (id, result) in group {

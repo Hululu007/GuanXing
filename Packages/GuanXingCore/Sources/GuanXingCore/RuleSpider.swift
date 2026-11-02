@@ -75,7 +75,7 @@ public struct RuleSpider: Sendable {
                     area: RuleDSL.pick(block, config.area),
                     typeName: RuleDSL.pick(block, config.typeName),
                     score: nil,
-                    tag: nil
+                    tag: link
                 )
             }
         return VodPage(items: items, page: page, pageCount: page + 1, total: items.count)
@@ -103,7 +103,7 @@ public struct RuleSpider: Sendable {
                     area: RuleDSL.pick(block, config.area),
                     typeName: RuleDSL.pick(block, config.typeName),
                     score: nil,
-                    tag: nil
+                    tag: link
                 )
             }
         return VodPage(items: items, page: page, pageCount: page + 1, total: items.count)

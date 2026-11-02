@@ -55,10 +55,12 @@ public enum ImportedConfigParser {
             let type = LooseValue.int(site["type"]) ?? 1
             let searchable = LooseValue.int(site["searchable"]) ?? 1
             let isAppleCMS = api.lowercased().contains("/api.php/provide/vod")
+            // type=3/4 的 csp_ 站点，能还原成纯 HTTP 的那些在这里挂上 Spider 绑定
+            let spider = SpiderBindingResolver.resolve(api: api, ext: site["ext"], type: type)
             if type == 3 || type == 4 {
-                if !isAppleCMS {
+                if !isAppleCMS && spider == nil {
                     skipped += 1
-                    reasons["需要 Spider 引擎", default: 0] += 1
+                    reasons["需要 Spider 运行时", default: 0] += 1
                     continue
                 }
             } else if type == 0 && !isAppleCMS {
@@ -89,10 +91,11 @@ public enum ImportedConfigParser {
             sources.append(VodSource(
                 id: StableID.make("site", key),
                 name: displayName,
-                api: api,
+                api: spider.flatMap { SpiderBindingResolver.apiRoot(api: api, binding: $0) } ?? api,
                 detailURL: URLNormalizer.normalized(LooseValue.string(site["detail"])),
                 origin: .imported,
-                headers: headers
+                headers: headers,
+                spider: spider
             ))
             seenSources.insert(api)
         }

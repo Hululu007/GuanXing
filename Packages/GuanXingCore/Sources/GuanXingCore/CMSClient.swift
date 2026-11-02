@@ -331,7 +331,7 @@ public enum SearchService {
     static func searchOne(source: VodSource, keyword: String, limit: Int) async -> SearchOutcome {
         let start = Date()
         do {
-            let items = try await CMSClient(source: source, timeout: 12).search(keyword: keyword)
+            let items = try await SourceClient(source: source, timeout: 12).search(keyword: keyword)
             return SearchOutcome(
                 source: source,
                 items: Array(items.prefix(limit)),

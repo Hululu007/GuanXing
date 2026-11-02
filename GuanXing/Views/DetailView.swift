@@ -33,7 +33,7 @@ final class DetailModel {
             return
         }
         do {
-            detail = try await CMSClient(source: source).detail(vodID: item.vodID)
+            detail = try await SourceClient(source: source).detail(vodID: item.vodID, link: item.tag)
             if let history = app.history(for: item), let matchedLine = detail?.lines.firstIndex(where: { $0.name == history.lineName }) {
                 selectedLine = matchedLine
                 episodeIndex = min(max(history.episodeIndex, 0), max(0, (detail?.lines[matchedLine].episodes.count ?? 1) - 1))

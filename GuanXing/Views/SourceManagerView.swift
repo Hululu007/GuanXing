@@ -213,7 +213,7 @@ struct SourceManagerView: View {
                         }
                         Button {
                             Task {
-                                let result = await CMSClient(source: source).healthCheck()
+                                let result = await SourceClient(source: source).healthCheck()
                                 app.health[source.id] = result
                                 app.save()
                             }
