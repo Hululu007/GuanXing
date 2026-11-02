@@ -137,7 +137,15 @@ TVBox 配置中的 `sites`、`lives`、`parses` 会被识别。`type=3/4` 的 `c
 2. **切换时视频层被重建**：原来用 `if/else` 返回两套布局，视图身份改变会让 `AVPlayerLayer` 整块重建，表现为黑屏或画面不跟着铺满。现在统一走 `GeometryReader` 显式计算高度（竖屏 16:9、全屏满高），视图身份不变。
 3. **旋转被系统拒绝**：`requestGeometryUpdate` 有时在转场/弹层收起前直接失败。现在失败会自动重试两次（间隔 80ms），并在退出时按真实方向决定是否强制回竖屏。
 
-版本号也从三处硬编码改为统一读 `Info.plist`（`AppVersion`），当前 `1.1.0 (2)`。
+版本号也从三处硬编码改为统一读 `Info.plist`（`AppVersion`），当前 `1.1.1 (3)`。
+
+### 1.1.1 修的三处显示问题
+
+1. **我的片源只显示十来个**：首页 `sourceShelf` 写死了 `app.sources.prefix(12)`，横向滑动到第 12 个就到底。现在改成两列 `LazyVGrid` 展示全部片源，46 个内置源一次列完，标题里同步显示总数。
+2. **首页左右被裁**：`LazyVStack` 只设了 `.padding(.horizontal, 18)`，一旦有子视图报出比视口更宽的宽度，整块内容就会被居中并截掉两侧。现在用 `GeometryReader` 把内容宽度钉死在视口宽度上，海报网格改用 `adaptive(minimum: 104, maximum: 168)`。
+3. **海报贴边切图**：`PosterCard` 原来写死 210pt 高度，列宽小于 148pt 时 `.fill` 会把左右裁掉。现在高度由列宽按 0.7 的比例推出，图片作为 overlay 正好铺满，不再裁切。
+
+同一版还修了全屏四周露底：`.ignoresSafeArea` 改为直接挂在量尺寸的 `GeometryReader` 上，播放页把窗口底色压成纯黑，`AVPlayerLayer` 开启 `masksToBounds`；全屏控件层固定留出 44pt 侧边距避开横屏刘海。
 
 
 ## 已知限制
