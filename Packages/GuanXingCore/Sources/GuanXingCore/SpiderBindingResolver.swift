@@ -37,7 +37,8 @@ public enum SpiderBindingResolver {
 
     /// 有些站的 api 是本地文件路径（如 `./lib/9.txt`），
     /// 这种要换成 ext 里的真实根地址，否则请求必然失败。
-    public static func apiRoot(api: String, binding: SpiderBinding) -> String? {
+    public static func apiRoot(api: String, binding: SpiderBinding?) -> String? {
+        guard let binding else { return nil }
         guard !api.lowercased().hasPrefix("http") else { return nil }
         let dict = binding.dictionary
         guard let root = LooseValue.string(dict["url"]) ?? LooseValue.string(dict["site"]),

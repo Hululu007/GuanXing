@@ -44,19 +44,33 @@ public enum ImportedConfigParser {
                 reasons["格式错误", default: 0] += 1
                 continue
             }
-            guard let api = URLNormalizer.normalized(LooseValue.string(site["api"])) else {
+            guard let rawAPI = LooseValue.string(site["api"]) else {
                 skipped += 1
                 reasons["地址无效", default: 0] += 1
                 continue
             }
-            let siteID = LooseValue.string(site["key"]) ?? URLNormalizer.host(of: api)
-            if seenSources.contains(api) { continue }
 
             let type = LooseValue.int(site["type"]) ?? 1
             let searchable = LooseValue.int(site["searchable"]) ?? 1
-            let isAppleCMS = api.lowercased().contains("/api.php/provide/vod")
             // type=3/4 的 csp_ 站点，能还原成纯 HTTP 的那些在这里挂上 Spider 绑定
-            let spider = SpiderBindingResolver.resolve(api: api, ext: site["ext"], type: type)
+            let spider = SpiderBindingResolver.resolve(api: rawAPI, ext: site["ext"], type: type)
+
+            // 能挂 Spider 的源，api 可能是类名，真实地址从 ext 里取
+            let api: String
+            if let root = SpiderBindingResolver.apiRoot(api: rawAPI, binding: spider) {
+                api = URLNormalizer.normalized(root, trimTrailingSlash: false) ?? root
+            } else if let normalized = URLNormalizer.normalized(rawAPI) {
+                api = normalized
+            } else {
+                skipped += 1
+                reasons["地址无效", default: 0] += 1
+                continue
+            }
+
+            let siteID = LooseValue.string(site["key"]) ?? URLNormalizer.host(of: api)
+            if seenSources.contains(api) { continue }
+
+            let isAppleCMS = rawAPI.lowercased().contains("/api.php/provide/vod")
             if type == 3 || type == 4 {
                 if !isAppleCMS && spider == nil {
                     skipped += 1
@@ -91,7 +105,7 @@ public enum ImportedConfigParser {
             sources.append(VodSource(
                 id: StableID.make("site", key),
                 name: displayName,
-                api: spider.flatMap { SpiderBindingResolver.apiRoot(api: api, binding: $0) } ?? api,
+                api: api,
                 detailURL: URLNormalizer.normalized(LooseValue.string(site["detail"])),
                 origin: .imported,
                 headers: headers,

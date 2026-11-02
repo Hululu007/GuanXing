@@ -180,6 +180,8 @@ final class AppModel {
         sources[index].name = trimmedName.isEmpty ? URLNormalizer.host(of: normalized) : trimmedName
         sources[index].api = normalized
         sources[index].detailURL = URLNormalizer.normalized(detail)
+        // 手动改成别的地址后，原来的私有协议绑定就不再适用
+        sources[index].spider = nil
         save()
     }
 
@@ -196,6 +198,7 @@ final class AppModel {
         sources[index].api = canonical.api
         sources[index].detailURL = canonical.detailURL
         sources[index].isAdult = canonical.isAdult
+        sources[index].spider = canonical.spider
         save()
         return true
     }

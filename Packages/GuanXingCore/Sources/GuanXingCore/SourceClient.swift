@@ -136,6 +136,13 @@ public struct SourceClient: Sendable {
     private func ruleLatest(_ binding: SpiderBinding, page: Int) async throws -> VodPage {
         let config = ruleConfig(binding)
         let spider = RuleSpider(config: config, source: source)
+        // 没有主页规则时，退到第一个分类页，避免请求站点根路径拿到空白页。
+        if config.homeURL == nil,
+           let first = config.categoryList.first,
+           let url = spider.categoryURL(categoryID: first.0, page: page) {
+            let html = try await GuanXingHTTP.getText(url, headers: source.headers, timeout: timeout)
+            return spider.parseList(html: html, page: page)
+        }
         let url = config.homeURL ?? source.api
         let html = try await GuanXingHTTP.getText(url, headers: source.headers, timeout: timeout)
         return spider.parseList(html: html, page: page)
