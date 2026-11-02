@@ -46,28 +46,32 @@ struct PlayerView: View {
             model?.teardown()
             // 把手势改过的亮度还原成进入播放器前的值。
             model?.restoreBrightness()
-            OrientationHelper.lockPortrait()
+            // 只在真的横屏时才强制回竖屏，避免打断用户本来就在竖屏的状态。
+            if OrientationHelper.isLandscape {
+                OrientationHelper.lockPortrait()
+            }
         }
     }
 
     private func content(_ model: PlayerModel) -> some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            if model.isFullscreen {
-                // 全屏时视频铺满整块屏幕，手势层直接压在视频上。
-                videoArea(model)
-                    .ignoresSafeArea()
-            } else {
-                VStack(spacing: 0) {
-                    topBar(model)
-                    videoArea(model)
-                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                        .frame(maxWidth: .infinity)
-                    episodePanel(model)
-                    Spacer(minLength: 0)
-                }
+        // 视频层必须始终占住同一个结构位置。
+        // 之前用 if/else 切换两套布局，进入全屏时 AVPlayerLayer 会被整块重建，
+        // 表现就是黑屏、或者画面不跟着铺满。
+        VStack(spacing: 0) {
+            if !model.isFullscreen {
+                topBar(model)
+            }
+            videoArea(model)
+                .modifier(VideoAreaLayout(fullscreen: model.isFullscreen))
+            if !model.isFullscreen {
+                episodePanel(model)
+                Spacer(minLength: 0)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+        .ignoresSafeArea(edges: model.isFullscreen ? .all : [])
+        .persistentSystemOverlays(model.isFullscreen ? .hidden : .automatic)
     }
 
     private func topBar(_ model: PlayerModel) -> some View {
@@ -392,13 +396,14 @@ struct PlayerView: View {
     }
 
     private func enterFullscreen(_ model: PlayerModel) {
+        // 先让系统允许横屏，再切布局，避免几何更新被旧 mask 拒绝。
+        OrientationHelper.lockLandscape()
         withAnimation(.easeInOut(duration: 0.25)) {
             model.isFullscreen = true
             model.controlsVisible = true
         }
-        // 进入全屏时重新读一次真实亮度/音量，避免和用户刚在控制中心改过的值不一致。
+        // 重新读一次真实亮度/音量，避免和用户刚在控制中心改过的值不一致。
         model.syncSystemLevels()
-        OrientationHelper.lockLandscape()
         model.showControlsTemporarily()
     }
 
@@ -433,6 +438,22 @@ struct PlayerView: View {
 
     private func speedLabel(_ value: Double) -> String {
         value == floor(value) ? "\(Int(value))x" : "\(value)x"
+    }
+}
+
+/// 竖屏锁定 16:9 并留黑边，全屏时铺满可用空间。
+/// 用 ViewModifier 而不是 if/else 包住 videoArea，保证视图身份不变、AVPlayerLayer 不被重建。
+private struct VideoAreaLayout: ViewModifier {
+    let fullscreen: Bool
+
+    func body(content: Content) -> some View {
+        if fullscreen {
+            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            content
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+        }
     }
 }
 

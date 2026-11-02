@@ -293,18 +293,37 @@ final class AppModel {
     }
 
     func merge(_ config: ImportedConfig) {
-        var addedSources = 0
-        var addedLives = 0
-        let sourceAPIs = Set(sources.map(\.api))
-        for source in config.sources where !sourceAPIs.contains(source.api) {
-            sources.append(source)
-            addedSources += 1
+        let result = applyMerge(config)
+        save()
+        var detail = config.report.summary
+        if result.duplicates > 0 {
+            detail += "\n已跳过 \(result.duplicates) 个重复源"
+            if !result.duplicateNames.isEmpty {
+                detail += "：" + result.duplicateNames.prefix(6).joined(separator: "、")
+                if result.duplicateNames.count > 6 { detail += " 等" }
+            }
         }
+        importMessage = ImportAlert(
+            title: "导入完成",
+            message: "\(config.report.format)：新增 \(result.addedSources) 个点播源、\(result.addedLives) 个直播源"
+                + (config.report.skipped > 0 ? "，跳过 \(config.report.skipped) 条" : ""),
+            detail: detail
+        )
+    }
+
+    /// 真正做合并的部分：按指纹去重，不落盘。
+    @discardableResult
+    func applyMerge(_ config: ImportedConfig) -> (addedSources: Int, addedLives: Int, duplicates: Int, duplicateNames: [String]) {
+        let merged = SourceDeduplicator.merge(incoming: config.sources, existing: sources)
+        sources.append(contentsOf: merged.added)
+
         let liveURLs = Set(liveSources.map(\.url))
+        var addedLives = 0
         for source in config.liveSources where !liveURLs.contains(source.url) {
             liveSources.append(source)
             addedLives += 1
         }
+
         let parserURLs = Set(parsers.map(\.url))
         for parser in config.parsers where !parserURLs.contains(parser.url) {
             parsers.append(parser)
@@ -312,12 +331,7 @@ final class AppModel {
         for url in config.repositoryURLs where !repositoryURLs.contains(url) {
             repositoryURLs.append(url)
         }
-        save()
-        importMessage = ImportAlert(
-            title: "导入完成",
-            message: "\(config.report.format)：新增 \(addedSources) 个点播源、\(addedLives) 个直播源\(config.report.skipped > 0 ? "，跳过 \(config.report.skipped) 条" : "")",
-            detail: config.report.summary
-        )
+        return (merged.added.count, addedLives, merged.duplicates, merged.duplicateNames)
     }
 
     func importConfig(text: String, name: String? = nil) throws {
@@ -342,6 +356,111 @@ final class AppModel {
                 detail: "请检查地址，或确认配置为 TVBox / LibreTV JSON 格式。"
             )
         }
+    }
+
+    /// 批量导入：一次吃下多个单仓 / 多仓地址。
+    ///
+    /// - 多仓（urls 数组）会自动展开成里面的每个单仓再拉一遍，最多两层。
+    /// - 全部结果按指纹去重，重复的不会进列表。
+    /// - 单个地址失败不影响其它地址，最后汇总报告。
+    func importBatch(_ rawText: String) async {
+        let candidates = rawText
+            .components(separatedBy: CharacterSet(charactersIn: "\n\r,，;； \t"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !candidates.isEmpty else {
+            importMessage = ImportAlert(title: "没有可导入的地址", message: "每行填一个配置地址，或直接粘贴整份 multi-repo JSON。")
+            return
+        }
+
+        // 直接贴一整份多仓 JSON 的情况
+        if candidates.count == 1, candidates[0].hasPrefix("{") {
+            do {
+                try importConfig(text: candidates[0], name: "多仓配置")
+            } catch {
+                importMessage = ImportAlert(
+                    title: "解析失败",
+                    message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                )
+            }
+            return
+        }
+
+        var totalAdded = 0
+        var totalDuplicates = 0
+        var totalSkipped = 0
+        var failed: [String] = []
+        var duplicateNames: [String] = []
+        var expandedCount = 0
+
+        // 第一层：用户给的单仓 / 多仓
+        for url in candidates {
+            let level1 = await loadLoose(url)
+            guard let config = level1 else {
+                failed.append(URLNormalizer.host(of: url))
+                continue
+            }
+
+            // 如果是多仓，展开后继续拉
+            if config.sources.isEmpty, !config.repositoryURLs.isEmpty {
+                for repoURL in config.repositoryURLs {
+                    expandedCount += 1
+                    guard let sub = await loadLoose(repoURL) else {
+                        failed.append(URLNormalizer.host(of: repoURL))
+                        continue
+                    }
+                    let merged = applyMerge(sub)
+                    totalAdded += merged.addedSources + merged.addedLives
+                    totalDuplicates += merged.duplicates
+                    duplicateNames.append(contentsOf: merged.duplicateNames)
+                    totalSkipped += sub.report.skipped
+                }
+                // 多仓本身也记进仓库列表，方便以后刷新
+                for repoURL in config.repositoryURLs where !repositoryURLs.contains(repoURL) {
+                    repositoryURLs.append(repoURL)
+                }
+                continue
+            }
+
+            let merged = applyMerge(config)
+            totalAdded += merged.addedSources + merged.addedLives
+            totalDuplicates += merged.duplicates
+            duplicateNames.append(contentsOf: merged.duplicateNames)
+            totalSkipped += config.report.skipped
+        }
+
+        save()
+
+        var lines: [String] = []
+        lines.append("共处理 \(candidates.count) 个地址" + (expandedCount > 0 ? "，展开 \(expandedCount) 个多仓子项" : ""))
+        lines.append("新增 \(totalAdded) 个源")
+        if totalDuplicates > 0 {
+            lines.append("跳过重复 \(totalDuplicates) 个")
+            if !duplicateNames.isEmpty {
+                lines.append("重复项：" + duplicateNames.prefix(8).joined(separator: "、"))
+            }
+        }
+        if totalSkipped > 0 { lines.append("解析时跳过 \(totalSkipped) 条不支持的类型") }
+        if !failed.isEmpty {
+            lines.append("无法访问：" + failed.prefix(8).joined(separator: "、") + (failed.count > 8 ? " 等 \(failed.count) 个" : ""))
+        }
+
+        importMessage = ImportAlert(
+            title: totalAdded > 0 ? "批量导入完成" : "没有新增源",
+            message: lines.joined(separator: "\n")
+        )
+    }
+
+    /// 拉一个地址，不管它是单仓还是多仓，都尽量解析出能用的部分。
+    private func loadLoose(_ url: String) async -> ImportedConfig? {
+        guard let normalized = URLNormalizer.normalized(url, trimTrailingSlash: false) else { return nil }
+        if let config = try? await ConfigLoader.load(urlString: normalized) {
+            return config
+        }
+        // 退一步：直接当裸 JSON 抓，支持多仓 / 带注释 / 图片藏配置
+        guard let text = try? await GuanXingHTTP.getText(normalized, timeout: 15) else { return nil }
+        return try? ImportedConfigParser.parse(text: text, fallbackName: URLNormalizer.host(of: normalized))
     }
 
     func checkAllHealth() async {

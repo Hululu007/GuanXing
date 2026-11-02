@@ -9,14 +9,16 @@ struct ImportCenterView: View {
     @State private var jsonText = ""
     @State private var isWorking = false
     @State private var showFileImporter = false
+    @State private var batchText = ""
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Picker("导入方式", selection: $mode) {
-                    Text("远程地址").tag(0)
-                    Text("粘贴 JSON").tag(1)
-                    Text("本地文件").tag(2)
+                    Text("单个地址").tag(0)
+                    Text("批量导入").tag(1)
+                    Text("粘贴 JSON").tag(2)
+                    Text("本地文件").tag(3)
                 }
                 .pickerStyle(.segmented)
 
@@ -24,6 +26,8 @@ struct ImportCenterView: View {
                 case 0:
                     remoteBlock
                 case 1:
+                    batchBlock
+                case 2:
                     pasteBlock
                 default:
                     fileBlock
@@ -74,6 +78,63 @@ struct ImportCenterView: View {
             }
             .buttonStyle(GXPrimaryButtonStyle())
             .disabled(isWorking || urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .gxCard(padding: 16)
+    }
+
+    private var batchBlock: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            Text("批量导入")
+                .font(.headline)
+                .foregroundStyle(.white)
+            Text("每行一个配置地址，可以混着填单仓和多仓。多仓会自动展开成里面的每个单仓再拉取，重复的接口按指纹自动合并，不会重复添加。")
+                .font(.caption)
+                .foregroundStyle(GXTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            TextEditor(text: $batchText)
+                .font(.system(size: 11, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 180)
+                .padding(8)
+                .background(GXTheme.background.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(alignment: .topLeading) {
+                    if batchText.isEmpty {
+                        Text("https://example.com/tvbox.json\nhttps://example.com/dc.txt")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(GXTheme.secondaryText.opacity(0.6))
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 16)
+                            .allowsHitTesting(false)
+                    }
+                }
+
+            HStack(spacing: 10) {
+                Button {
+                    batchText = BuiltinSources.batchSeed
+                } label: {
+                    Text("填入内置源")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(GXSecondaryButtonStyle())
+
+                Button {
+                    importBatch()
+                } label: {
+                    HStack {
+                        if isWorking { ProgressView().tint(Color.black) }
+                        Text(isWorking ? "正在导入" : "开始导入")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(GXPrimaryButtonStyle())
+                .disabled(isWorking || batchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+            Text("去重规则：忽略 http/https、末尾斜杠、默认端口和 ac=list 等参数差异；同一路苹果 CMS 接口只会保留一份。")
+                .font(.caption2)
+                .foregroundStyle(GXTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .gxCard(padding: 16)
     }
@@ -192,6 +253,16 @@ struct ImportCenterView: View {
                     .foregroundStyle(GXTheme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    private func importBatch() {
+        let text = batchText
+        isWorking = true
+        Task {
+            await app.importBatch(text)
+            isWorking = false
+            batchText = ""
         }
     }
 

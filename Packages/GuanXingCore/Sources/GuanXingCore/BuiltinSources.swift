@@ -270,6 +270,12 @@ public enum BuiltinSources {
         "http://xmbjm.fh4u.org/dc.txt"
     ]
 
+    /// 「批量导入」页的预填内容：多仓 + 已实测可用的单仓接口。
+    /// 用户可以直接在此基础上删改，导入时会按指纹自动去重。
+    public static var batchSeed: String {
+        (repositoryURLs + vod.map(\.api)).joined(separator: "\n")
+    }
+
     /// 接口地址或 ID 重复即视为同一个源，用于导入与更新时去重。
     public static func isDuplicate(_ source: VodSource, in list: [VodSource]) -> Bool {
         let api = source.api.lowercased()
