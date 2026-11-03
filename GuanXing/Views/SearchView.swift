@@ -234,6 +234,9 @@ struct SearchView: View {
 
     private var suggestionsBlock: some View {
         VStack(alignment: .leading, spacing: 18) {
+            if !app.history.isEmpty {
+                resumeBlock
+            }
             if !app.settings.searchHistory.isEmpty {
                 historyBlock
             }
@@ -268,6 +271,74 @@ struct SearchView: View {
         }
     }
 
+    /// 搜索页的「搜索历史」只是关键词，点一下是重新搜索。
+    /// 真正能续播的是播放记录，这里把它单独列一块，避免用户误以为点关键词能接着看。
+    private var resumeBlock: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("继续观看")
+                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .foregroundStyle(.white)
+                Spacer()
+                Text("\(app.history.count) 条")
+                    .font(.caption)
+                    .foregroundStyle(GXTheme.secondaryText)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    // 只取最近 10 条，搜索页只是快捷入口，完整列表在「片库」。
+                    ForEach(Array(app.history.prefix(10))) { entry in
+                        resumeCard(entry)
+                    }
+                }
+                .padding(.vertical, 1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func resumeCard(_ entry: HistoryEntry) -> some View {
+        Button {
+            // 直接续播：跳过详情页，从上次的集数与秒数接着放。
+            router.push(.resume(entry))
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                Color.clear
+                    .frame(width: 132, height: 78)
+                    .overlay { RemoteImage(url: entry.item.pic) }
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(GXTheme.gold)
+                            .padding(6)
+                    }
+                Text(entry.item.name)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(entry.episodeName)
+                    .font(.caption2)
+                    .foregroundStyle(GXTheme.secondaryText)
+                    .lineLimit(1)
+                ProgressView(value: entry.progress)
+                    .tint(GXTheme.gold)
+                    .scaleEffect(x: 1, y: 0.6, anchor: .center)
+            }
+            .frame(width: 132, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) {
+                app.history.removeAll { $0.id == entry.id }
+                app.save()
+            } label: {
+                Label("移除记录", systemImage: "trash")
+            }
+        }
+    }
+
     private var historyBlock: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -286,24 +357,49 @@ struct SearchView: View {
                 .contentShape(Rectangle())
             }
             FlowLayout(spacing: 8) {
-                ForEach(app.settings.searchHistory, id: \.self) { keyword in
+                ForEach(historyChips) { chip in
+                    // 关键词如果刚好对上一条观看记录，点它就直接续播；
+                    // 否则还是原来的行为：拿这个词重新搜一遍。
                     Button {
-                        model.keyword = keyword
-                        model.search(keyword, app: app)
+                        if let entry = chip.entry {
+                            router.push(.resume(entry))
+                        } else {
+                            model.keyword = chip.keyword
+                            model.search(chip.keyword, app: app)
+                        }
                     } label: {
-                        Text(keyword)
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.9))
-                            .lineLimit(1)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .background(GXTheme.surfaceElevated, in: Capsule())
-                            .overlay(Capsule().stroke(GXTheme.stroke, lineWidth: 1))
+                        HStack(spacing: 5) {
+                            if chip.entry != nil {
+                                Image(systemName: "play.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(GXTheme.gold)
+                            }
+                            Text(chip.keyword)
+                                .font(.subheadline)
+                                .foregroundStyle(.white.opacity(0.9))
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(GXTheme.surfaceElevated, in: Capsule())
+                        .overlay(
+                            Capsule().stroke(
+                                chip.entry != nil ? GXTheme.gold.opacity(0.55) : GXTheme.stroke,
+                                lineWidth: 1
+                            )
+                        )
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
+                        if let entry = chip.entry {
+                            Button {
+                                router.push(.resume(entry))
+                            } label: {
+                                Label("继续观看", systemImage: "play.circle")
+                            }
+                        }
                         Button(role: .destructive) {
-                            app.removeSearch(keyword)
+                            app.removeSearch(chip.keyword)
                         } label: {
                             Label("删除这条", systemImage: "trash")
                         }
@@ -311,6 +407,33 @@ struct SearchView: View {
                 }
             }
         }
+    }
+
+    /// 搜索历史标签 + 它对应的可续播记录（没有就是 nil）。
+    /// 先算成数组，避免在 ViewBuilder 的 ForEach 闭包里写局部 let。
+    private struct HistoryChip: Hashable, Identifiable {
+        let keyword: String
+        let entry: HistoryEntry?
+        var id: String { keyword }
+    }
+
+    private var historyChips: [HistoryChip] {
+        app.settings.searchHistory.map { keyword in
+            HistoryChip(keyword: keyword, entry: resumeEntry(for: keyword))
+        }
+    }
+
+    /// 关键词与某条观看记录的片名对得上（完全同名优先，其次包含），
+    /// 就认为这条历史可以续播。
+    private func resumeEntry(for keyword: String) -> HistoryEntry? {
+        let value = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        if let exact = app.history.first(where: {
+            $0.item.name.caseInsensitiveCompare(value) == .orderedSame
+        }) {
+            return exact
+        }
+        return app.history.first { $0.item.name.localizedCaseInsensitiveContains(value) }
     }
 
     private func searchTip(icon: String, title: String, detail: String) -> some View {

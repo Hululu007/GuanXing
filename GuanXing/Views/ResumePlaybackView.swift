@@ -20,9 +20,11 @@ struct ResumePlaybackView: View {
                     icon: "exclamationmark.triangle",
                     title: "续播失败",
                     message: errorMessage,
-                    actionTitle: "看详情"
+                    actionTitle: "换源重找"
                 ) {
-                    router.push(.detail(entry.item))
+                    didStart = false
+                    errorMessage = nil
+                    Task { await start() }
                 }
             } else {
                 VStack(spacing: 14) {
@@ -45,28 +47,68 @@ struct ResumePlaybackView: View {
     private func start() async {
         guard !didStart else { return }
         didStart = true
-        guard let source = app.source(for: entry.item.sourceID) else {
-            errorMessage = "这条记录所属的片源已被删除，换一个源再看。"
+        // 先走原源。源被删、域名挂了、条目下架都会失败，
+        // 这些情况不再直接给用户看报错，而是回落到「按片名在其它源重找」。
+        if let source = app.source(for: entry.item.sourceID),
+           let launched = await launch(from: source, detailItem: entry.item) {
+            router.push(.player(launched))
             return
         }
+        await fallbackByName()
+    }
+
+    /// 在原源上拉详情并跳播放器。成功返回 nil 以外的结果。
+    private func launch(from source: VodSource, detailItem: VodItem) async -> PlayerLaunch? {
         do {
             let detail = try await SourceClient(source: source)
-                .detail(vodID: entry.item.vodID, link: entry.item.tag)
+                .detail(vodID: detailItem.vodID, link: detailItem.tag)
             let lines = detail.lines.filter { !$0.episodes.isEmpty }
             guard let line = lines.first(where: { $0.name == entry.lineName }) ?? lines.first else {
-                errorMessage = "这个源已经没有可播放的线路了。"
-                return
+                return nil
             }
             let index = min(max(entry.episodeIndex, 0), line.episodes.count - 1)
-            router.push(.player(PlayerLaunch(
-                item: entry.item,
+            return PlayerLaunch(
+                item: detailItem,
                 detail: detail,
                 lineName: line.name,
                 episodeIndex: index,
                 startPosition: entry.position
-            )))
+            )
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            return nil
         }
+    }
+
+    /// 原源不可用时，按片名在其它已启用源里重新找一部同名的。
+    /// 换源后集数编号不一定对得上，所以从头播而不是硬套旧集数。
+    private func fallbackByName() async {
+        let targets = app.enabledSources.filter {
+            $0.id != entry.item.sourceID && $0.isSearchable && !$0.isAdult
+        }
+        guard !targets.isEmpty else {
+            errorMessage = "这条记录所属的片源已不可用，也没有其它源能接上。"
+            return
+        }
+        let result = await SearchService.search(keyword: entry.item.name, sources: targets, limitPerSource: 8)
+        // 优先同名且同源的条目，其次任意同名条目。
+        let candidates = result.items.filter {
+            $0.name.caseInsensitiveCompare(entry.item.name) == .orderedSame
+        } + result.items.filter {
+            $0.name.caseInsensitiveCompare(entry.item.name) != .orderedSame
+        }
+        for candidate in candidates.prefix(6) {
+            guard let source = app.source(for: candidate.sourceID),
+                  let launched = await launch(from: source, detailItem: candidate) else { continue }
+            // 换源后旧集数/旧秒数不可信，从头开始。
+            router.push(.player(PlayerLaunch(
+                item: launched.item,
+                detail: launched.detail,
+                lineName: launched.lineName,
+                episodeIndex: 0,
+                startPosition: 0
+            )))
+            return
+        }
+        errorMessage = "原源已失效，其它源也没找到能播的《\(entry.item.name)》。"
     }
 }
