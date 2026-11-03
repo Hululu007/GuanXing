@@ -62,33 +62,44 @@ struct PlayerView: View {
         // 关键点：.ignoresSafeArea 必须直接挂在 GeometryReader 上。
         // 挂在外面时 GeometryReader 量到的是「扣掉安全区」的尺寸，
         // 全屏就变成一块比屏幕小的居中画面，四周露出上一页，看起来像加了个边框。
-        ZStack {
-            Color.black.ignoresSafeArea()
-            GeometryReader { proxy in
-                VStack(spacing: 0) {
-                    if !model.isFullscreen {
-                        topBar(model)
-                    }
-                    // 只改尺寸、不换分支：videoArea 始终占同一个结构位置。
-                    // 用 if/else 切成两套布局会改变视图身份，AVPlayerLayer 被整块重建，
-                    // 表现就是切全屏黑屏一次。
-                    videoArea(model)
-                        .frame(
-                            width: proxy.size.width,
-                            height: model.isFullscreen
-                                ? proxy.size.height
-                                : proxy.size.width * 9.0 / 16.0
-                        )
-                    if !model.isFullscreen {
-                        episodePanel(model)
-                        Spacer(minLength: 0)
-                    }
+        GeometryReader { proxy in
+            // 全屏取「视口」与「屏幕 bounds」中较大的那个：
+            // 旋转过程中两者会短暂不一致，取最大值可以保证任何一帧都盖满整屏，
+            // 不会出现画面比屏幕小一圈、四周露出底色的情况。
+            let stage = model.isFullscreen
+                ? CGSize(
+                    width: max(proxy.size.width, ScreenGeometry.width),
+                    height: max(proxy.size.height, ScreenGeometry.height)
+                )
+                : proxy.size
+            VStack(spacing: 0) {
+                if !model.isFullscreen {
+                    topBar(model)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // 只改尺寸、不换分支：videoArea 始终占同一个结构位置。
+                // 用 if/else 切成两套布局会改变视图身份，AVPlayerLayer 被整块重建，
+                // 表现就是切全屏黑屏一次。
+                //
+                // 全屏尺寸取窗口的 bounds，而不是 GeometryReader 量到的安全区尺寸。
+                // 这里即使加了 ignoresSafeArea，量到的值在旋转过程中也可能仍是旧值/内缩值，
+                // 视频层就按那个小尺寸排版，四周露出一圈底色。
+                videoArea(model)
+                    .frame(
+                        width: stage.width,
+                        height: model.isFullscreen
+                            ? stage.height
+                            : stage.width * 9.0 / 16.0
+                    )
+                if !model.isFullscreen {
+                    episodePanel(model)
+                    Spacer(minLength: 0)
+                }
             }
-            .ignoresSafeArea(edges: model.isFullscreen ? .all : [])
+            .frame(width: stage.width, alignment: .center)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
-        .background(Color.black)
+        .ignoresSafeArea(edges: model.isFullscreen ? .all : [])
+        .background(Color.black.ignoresSafeArea())
         .persistentSystemOverlays(model.isFullscreen ? .hidden : .automatic)
     }
 
@@ -167,6 +178,23 @@ struct PlayerView: View {
     }
 
     private func controlsOverlay(_ model: PlayerModel) -> some View {
+        // 渐变铺满整屏，控件内容单独内缩。
+        // 顺序不能反：先把 padding 加在外层，渐变也会跟着缩进 44pt，
+        // 屏幕上就会出现一块比视口小的暗色矩形，看着像「漏出正方形边框」。
+        controlsContent(model)
+            .padding(controlInsets(model))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                LinearGradient(
+                    colors: [.black.opacity(0.62), .clear, .black.opacity(0.74)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .allowsHitTesting(false)
+            }
+    }
+
+    private func controlsContent(_ model: PlayerModel) -> some View {
         VStack(spacing: 0) {
             HStack {
                 if model.isFullscreen {
@@ -315,16 +343,6 @@ struct PlayerView: View {
             .padding(.bottom, model.isFullscreen ? 26 : 6)
             .padding(.top, model.isFullscreen ? 0 : 4)
         }
-        .background {
-            // 背景不参与点击判定，否则会挡住下面的手势层。
-            LinearGradient(
-                colors: [.black.opacity(0.62), .clear, .black.opacity(0.74)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .allowsHitTesting(false)
-        }
-        .safeAreaPadding(controlInsets(model))
         .overlay(alignment: .center) {
             if model.showSpeedPicker {
                 speedPicker(model)
@@ -479,10 +497,28 @@ struct PlayerView: View {
     }
 }
 
+/// 播放器排版用的屏幕尺寸。
+/// 直接读窗口 bounds，不依赖 SwiftUI 的安全区读数：
+/// 旋转动画进行中 GeometryReader 给出的还是旧尺寸，全屏画面就会比屏幕小一圈。
+@MainActor
+enum ScreenGeometry {
+    static var width: CGFloat { current.width }
+
+    static var height: CGFloat { current.height }
+
+    static var current: CGSize {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        if let bounds = scene?.screen.bounds.size, bounds.width > 1, bounds.height > 1 {
+            return bounds
+        }
+        return CGSize(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
+    }
+}
+
 /// 播放页要把窗口底色压成纯黑。
 /// 播放器是全屏推入 NavigationStack 的，但窗口根视图仍带着上层页面的背景色，
-/// 只要播放视图有一点内缩（安全区、转角、转场），边缘就会露出那层颜色，
-/// 在深色画面上就是一圈「边框」。
+/// 只要播放视图有一点内缩（安全区、转角、转场），边缘就会露出那层颜色。
 @MainActor
 enum WindowBackdrop {
     private static var previousColor: UIColor?

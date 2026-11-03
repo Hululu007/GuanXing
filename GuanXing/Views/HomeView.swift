@@ -369,14 +369,18 @@ struct HomeView: View {
                     router.push(.sourceManager)
                 }
             } else {
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 10), count: 2),
-                    spacing: 10
-                ) {
-                    ForEach(app.sources) { source in
-                        sourceCard(source)
+                // 横向滑动，一屏露出 2.5 张卡，暗示「还能往左滑」。
+                // 全部 46 个源都在这一条里，不再截断。
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(app.sources) { source in
+                            sourceCard(source)
+                                .frame(width: 164)
+                        }
                     }
+                    .padding(.vertical, 1)
                 }
+                .scrollClipDisabled()
             }
         }
     }
