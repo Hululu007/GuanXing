@@ -4,19 +4,24 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(AppRouter.self) private var router
 
+    /// TabView 的选中项用本地状态承载，再由 onChange 与 router 双向同步。
+    /// 直接绑定 router.selectedTab 时，程序化切页（首页右上角搜索按钮）在部分
+    /// 系统版本上不会驱动 TabView 换页，表现就是「点搜索没反应」。
+    @State private var selectedTab: AppRouter.Tab = .home
+
     var body: some View {
         TabView(selection: Binding(
-            get: { router.selectedTab },
+            get: { selectedTab },
             set: { tab in
                 // 已经停在搜索页时再次点「搜索」页签，等同于「重新搜一次」：
                 // 清掉上次结果并把光标放回输入框，不用先滑回顶部再点。
-                // 这里先把 tab 落定再发请求，避免 selectedTab 仍是旧值时
-                // openSearch 内部的赋值触发一次多余的 TabView 切换。
-                if tab == .search, router.selectedTab == .search {
+                if tab == .search, selectedTab == .search {
+                    selectedTab = .search
                     router.selectedTab = .search
                     router.openSearch()
                     return
                 }
+                selectedTab = tab
                 router.selectedTab = tab
             }
         )) {
@@ -89,6 +94,9 @@ struct RootView: View {
                 Label("设置", systemImage: "slider.horizontal.3")
             }
             .tag(AppRouter.Tab.settings)
+        }
+        .onChange(of: router.selectedTab) { _, newValue in
+            if selectedTab != newValue { selectedTab = newValue }
         }
         .alert(item: Binding(
             get: { app.importMessage },

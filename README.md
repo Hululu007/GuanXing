@@ -148,6 +148,16 @@ TVBox 配置中的 `sites`、`lives`、`parses` 会被识别。`type=3/4` 的 `c
 同一版还修了全屏四周露底：`.ignoresSafeArea` 改为直接挂在量尺寸的 `GeometryReader` 上，播放页把窗口底色压成纯黑，`AVPlayerLayer` 开启 `masksToBounds`；全屏控件层固定留出 44pt 侧边距避开横屏刘海。
 
 
+### 1.1.5 修的两处交互问题
+
+1. **切换片源后整页空白**：`HomeView` 的外层 `GeometryReader` 在 TabView 内重建时会先报出宽度 0，
+   把整块 `LazyVStack` 压成 0×0，于是只剩背景，必须下滑触发一次重排才恢复。已去掉这层包裹，
+   改用 `frame(maxWidth: .infinity, alignment: .leading)`，宽高都由父视图正常推导。
+2. **右上角搜索按钮点了没反应**：`TabView` 的 selection 之前直接绑 `router.selectedTab`，
+   程序化切页在部分系统版本上不驱动换页；首页视图重建时还会把搜索请求吃掉。现在 TabView 用本地
+   `@State` 承载选中项并与 `router` 双向同步，搜索请求改为自增序号 `searchRequestID`，
+   `SearchView` 用 `handledRequestID` 去重，重建后的新实例不会误判成已处理。
+
 ## 已知限制
 
 - 本仓库在 Windows 上完成开发与核心层测试，没有在本机生成签名 IPA：iOS 打包与签名强依赖 macOS 与 Xcode，Windows 无法完成。

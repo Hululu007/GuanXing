@@ -36,6 +36,11 @@ final class AppRouter {
     var libraryPath = NavigationPath()
     var settingsPath = NavigationPath()
     var searchSeed: String?
+    /// 搜索页已经消费到的请求序号。放在 router 上而不是视图的 @State 里：
+    /// 视图被重建（切换片源后 TabView 会重建首页，也可能连带重建搜索页）时
+    /// @State 会重置，既可能把旧请求当成新请求（一启动就弹键盘），
+    /// 也可能把刚发出的请求当成已处理（点了搜索没反应）。
+    var lastHandledSearchRequestID = 0
     /// 搜索请求序号。每次点搜索按钮都自增，搜索页用 onChange 观察它。
     ///
     /// 之前用 Bool 标志，搜索页消费后翻回 false：如果这次点击恰好伴随

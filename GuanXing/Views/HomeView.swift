@@ -104,28 +104,26 @@ struct HomeView: View {
     @State private var model = HomeModel()
 
     var body: some View {
-        // 用几何值把内容宽度钉死在屏幕宽度上。
-        // 之前只有 .padding(.horizontal, 18)，一旦有子视图报出比视口更宽的尺寸，
-        // LazyVStack 就会变宽并被居中，表现就是左右两边各被裁掉一截。
-        GeometryReader { outer in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 24) {
-                    header
-                    hero
-                    quickStats
-                    categoryStrip
-                    content
-                    sourceShelf
-                }
-                .padding(.horizontal, 18)
-                .padding(.top, 8)
-                .padding(.bottom, 32)
-                .frame(width: outer.size.width, alignment: .leading)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 24) {
+                header
+                hero
+                quickStats
+                categoryStrip
+                content
+                sourceShelf
             }
-            .scrollIndicators(.hidden)
-            .refreshable {
-                await model.refresh()
-            }
+            .padding(.horizontal, 18)
+            .padding(.top, 8)
+            .padding(.bottom, 32)
+            // 撑满可用宽度并左对齐，取代原来的 GeometryReader 定宽方案。
+            // GeometryReader 在 TabView 内部重建时会先返回 0 宽，把整块内容压成
+            // 0x0，表现就是切源后整页空白、必须下拉一次才恢复。
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollIndicators(.hidden)
+        .refreshable {
+            await model.refresh()
         }
         .background {
             ZStack {

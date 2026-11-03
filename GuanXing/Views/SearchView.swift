@@ -110,8 +110,6 @@ struct SearchView: View {
     @Environment(AppRouter.self) private var router
     @State private var model = SearchModel()
     @FocusState private var focused: Bool
-    /// 已经处理过的请求序号。视图重建时用它跳过重复消费，而不是靠清空标志位。
-    @State private var handledRequestID = -1
     @State private var showClearSearchAlert = false
 
     private let suggestions = ["庆余年", "流浪地球", "繁花", "三体", "沙丘", "甄嬛传", "奥本海默", "狂飙"]
@@ -148,8 +146,8 @@ struct SearchView: View {
     }
 
     private func consumePendingRequest() {
-        guard handledRequestID != router.searchRequestID || router.searchSeed != nil else { return }
-        handledRequestID = router.searchRequestID
+        guard router.searchRequestID > router.lastHandledSearchRequestID || router.searchSeed != nil else { return }
+        router.lastHandledSearchRequestID = router.searchRequestID
         handleSearchRequest()
     }
 
