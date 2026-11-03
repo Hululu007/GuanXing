@@ -408,6 +408,8 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var removedBuiltinSourceIDs: [String]
     /// 用户当前采用的内置源目录版本，用于提示有新版可更新。
     public var builtinCatalogVersion: String
+    /// 搜索历史，最新的在前。可以在搜索页清除。
+    public var searchHistory: [String]
 
     public init(
         autoNext: Bool = true,
@@ -416,7 +418,8 @@ public struct AppSettings: Codable, Hashable, Sendable {
         defaultSpeed: Double = 1.0,
         preferHighCompatibility: Bool = true,
         removedBuiltinSourceIDs: [String] = [],
-        builtinCatalogVersion: String = BuiltinSources.catalogVersion
+        builtinCatalogVersion: String = BuiltinSources.catalogVersion,
+        searchHistory: [String] = []
     ) {
         self.autoNext = autoNext
         self.rememberProgress = rememberProgress
@@ -425,11 +428,12 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.preferHighCompatibility = preferHighCompatibility
         self.removedBuiltinSourceIDs = removedBuiltinSourceIDs
         self.builtinCatalogVersion = builtinCatalogVersion
+        self.searchHistory = searchHistory
     }
 
     private enum CodingKeys: String, CodingKey {
         case autoNext, rememberProgress, autoPlay, defaultSpeed, preferHighCompatibility
-        case removedBuiltinSourceIDs, builtinCatalogVersion
+        case removedBuiltinSourceIDs, builtinCatalogVersion, searchHistory
     }
 
     public init(from decoder: Decoder) throws {
@@ -442,6 +446,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         removedBuiltinSourceIDs = try c.decodeIfPresent([String].self, forKey: .removedBuiltinSourceIDs) ?? []
         builtinCatalogVersion = try c.decodeIfPresent(String.self, forKey: .builtinCatalogVersion)
             ?? BuiltinSources.catalogVersion
+        searchHistory = try c.decodeIfPresent([String].self, forKey: .searchHistory) ?? []
     }
 }
 

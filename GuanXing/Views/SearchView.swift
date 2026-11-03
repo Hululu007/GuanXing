@@ -63,6 +63,7 @@ final class SearchModel {
 
         keyword = value
         hasSearched = true
+        app.recordSearch(value)
         errorMessage = nil
         filterSourceID = nil
         items = []
@@ -109,6 +110,9 @@ struct SearchView: View {
     @Environment(AppRouter.self) private var router
     @State private var model = SearchModel()
     @FocusState private var focused: Bool
+    /// 已经处理过的请求序号。视图重建时用它跳过重复消费，而不是靠清空标志位。
+    @State private var handledRequestID = -1
+    @State private var showClearSearchAlert = false
 
     private let suggestions = ["庆余年", "流浪地球", "繁花", "三体", "沙丘", "甄嬛传", "奥本海默", "狂飙"]
 
@@ -132,14 +136,20 @@ struct SearchView: View {
         .gxScreenBackground()
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { consumePendingRequest() }
-        .onChange(of: router.pendingSearchFocus) { _, pending in
-            if pending { consumePendingRequest() }
+        .onChange(of: router.searchRequestID) { _, _ in
+            consumePendingRequest()
+        }
+        .alert("清除搜索历史？", isPresented: $showClearSearchAlert) {
+            Button("清除", role: .destructive) { app.clearSearchHistory() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("共 \(app.settings.searchHistory.count) 条，清除后无法恢复。")
         }
     }
 
     private func consumePendingRequest() {
-        guard router.pendingSearchFocus || router.searchSeed != nil else { return }
-        router.pendingSearchFocus = false
+        guard handledRequestID != router.searchRequestID || router.searchSeed != nil else { return }
+        handledRequestID = router.searchRequestID
         handleSearchRequest()
     }
 
@@ -226,6 +236,10 @@ struct SearchView: View {
 
     private var suggestionsBlock: some View {
         VStack(alignment: .leading, spacing: 18) {
+            if !app.settings.searchHistory.isEmpty {
+                historyBlock
+            }
+
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(title: "热搜试试", subtitle: "点击直接开始多源搜索")
                 FlowLayout(spacing: 8) {
@@ -252,6 +266,51 @@ struct SearchView: View {
                 searchTip(icon: "textformat", title: "输入完整片名", detail: "例如「庆余年 第二季」比「庆余年」更容易命中。")
                 searchTip(icon: "square.stack.3d.up", title: "多源会合并", detail: "同名影片来自不同源，点开后可以比较线路。")
                 searchTip(icon: "bolt", title: "失败不影响结果", detail: "个别源超时会自动忽略，其余源的结果仍会展示。")
+            }
+        }
+    }
+
+    private var historyBlock: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("搜索历史")
+                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .foregroundStyle(.white)
+                Spacer()
+                Button("清除") {
+                    showClearSearchAlert = true
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(GXTheme.secondaryText)
+                .buttonStyle(.plain)
+                .padding(.vertical, 6)
+                .padding(.leading, 12)
+                .contentShape(Rectangle())
+            }
+            FlowLayout(spacing: 8) {
+                ForEach(app.settings.searchHistory, id: \.self) { keyword in
+                    Button {
+                        model.keyword = keyword
+                        model.search(keyword, app: app)
+                    } label: {
+                        Text(keyword)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.9))
+                            .lineLimit(1)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(GXTheme.surfaceElevated, in: Capsule())
+                            .overlay(Capsule().stroke(GXTheme.stroke, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            app.removeSearch(keyword)
+                        } label: {
+                            Label("删除这条", systemImage: "trash")
+                        }
+                    }
+                }
             }
         }
     }

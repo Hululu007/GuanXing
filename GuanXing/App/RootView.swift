@@ -10,8 +10,12 @@ struct RootView: View {
             set: { tab in
                 // 已经停在搜索页时再次点「搜索」页签，等同于「重新搜一次」：
                 // 清掉上次结果并把光标放回输入框，不用先滑回顶部再点。
+                // 这里先把 tab 落定再发请求，避免 selectedTab 仍是旧值时
+                // openSearch 内部的赋值触发一次多余的 TabView 切换。
                 if tab == .search, router.selectedTab == .search {
+                    router.selectedTab = .search
                     router.openSearch()
+                    return
                 }
                 router.selectedTab = tab
             }

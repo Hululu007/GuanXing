@@ -36,9 +36,13 @@ final class AppRouter {
     var libraryPath = NavigationPath()
     var settingsPath = NavigationPath()
     var searchSeed: String?
-    /// 首页点了搜索钮后置位，搜索页消费完就清掉。
-    /// 用它而不用 onAppear，避免从详情页返回时把结果清空。
-    var pendingSearchFocus = false
+    /// 搜索请求序号。每次点搜索按钮都自增，搜索页用 onChange 观察它。
+    ///
+    /// 之前用 Bool 标志，搜索页消费后翻回 false：如果这次点击恰好伴随
+    /// 首页视图重建（例如刚切换过片源），新实例的 onAppear 会先跑一遍，
+    /// 把还没送到的请求当成旧请求吃掉，表现就是「点了搜索没反应」。
+    /// 序号只会递增，任何一次点击都不会被误判成已处理。
+    var searchRequestID = 0
 
     func openSearch(_ text: String? = nil) {
         // 先切回搜索 tab，再清掉上一次遗留的导航栈，
@@ -46,7 +50,7 @@ final class AppRouter {
         selectedTab = .search
         searchPath = NavigationPath()
         searchSeed = text
-        pendingSearchFocus = true
+        searchRequestID &+= 1
     }
 
     func push(_ route: Route) {

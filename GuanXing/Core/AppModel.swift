@@ -556,6 +556,30 @@ final class AppModel {
         save()
     }
 
+    /// 记一条搜索关键词。同词提到最前，最多保留 20 条。
+    func recordSearch(_ keyword: String) {
+        let value = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        var list = settings.searchHistory
+        list.removeAll { $0.caseInsensitiveCompare(value) == .orderedSame }
+        list.insert(value, at: 0)
+        if list.count > 20 { list = Array(list.prefix(20)) }
+        guard list != settings.searchHistory else { return }
+        settings.searchHistory = list
+        save()
+    }
+
+    func removeSearch(_ keyword: String) {
+        settings.searchHistory.removeAll { $0 == keyword }
+        save()
+    }
+
+    func clearSearchHistory() {
+        guard !settings.searchHistory.isEmpty else { return }
+        settings.searchHistory.removeAll()
+        save()
+    }
+
     func history(for item: VodItem) -> HistoryEntry? {
         history.first { $0.item.id == item.id }
     }
