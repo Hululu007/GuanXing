@@ -174,6 +174,9 @@ struct HomeView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("搜索")
         }
+        // hero 在 header 之后绘制，命中测试也优先；显式抬高 header 的层级，
+        // 保证右上角那颗按钮在任何情况下都拿得到点击。
+        .zIndex(2)
     }
 
     private var hero: some View {
@@ -183,10 +186,13 @@ struct HomeView: View {
                     router.push(.detail(item))
                 } label: {
                     ZStack(alignment: .bottomLeading) {
-                        RemoteImage(url: item.pic)
+                        // 用 Color.clear 定尺寸、图片放 overlay：
+                        // 竖版海报在 248pt 高度里用 .fill 会纵向溢出上百 pt，
+                        // .clipped() 只裁画面不裁命中区，溢出的部分会盖到上面的
+                        // header，把「搜索」按钮的点击吞掉（点搜索反而进了详情页）。
+                        Color.clear
                             .frame(height: 248)
-                            .frame(maxWidth: .infinity)
-                            .clipped()
+                            .overlay { RemoteImage(url: item.pic) }
                         LinearGradient(
                             colors: [.clear, GXTheme.background.opacity(0.86), GXTheme.background],
                             startPoint: .center,
@@ -224,11 +230,14 @@ struct HomeView: View {
                         }
                         .padding(18)
                     }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 248)
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
                             .stroke(GXTheme.stroke, lineWidth: 1)
                     )
+                    .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 }
                 .buttonStyle(.plain)
             } else {

@@ -158,6 +158,14 @@ TVBox 配置中的 `sites`、`lives`、`parses` 会被识别。`type=3/4` 的 `c
    `@State` 承载选中项并与 `router` 双向同步，搜索请求改为自增序号 `searchRequestID`，
    `SearchView` 用 `handledRequestID` 去重，重建后的新实例不会误判成已处理。
 
+### 1.1.6 修的点击错位
+
+首页右上角的搜索按钮点下去会进「创业面对面」详情页。原因是 hero 用了
+`RemoteImage(...).frame(height: 248).clipped()`：竖版海报在 `.fill` 下会纵向溢出约上百 pt，
+而 `.clipped()` 只裁画面**不裁命中区**，溢出的透明区域盖到了 header 上，点击就被 hero 的
+Button 接走。现在两处都改成 `Color.clear` 定尺寸 + `overlay` 装图片，并给 header 加了
+`zIndex(2)`。`DetailView` 的 backdrop 是同样的写法（会盖住返回按钮），一并修了。
+
 ## 已知限制
 
 - 本仓库在 Windows 上完成开发与核心层测试，没有在本机生成签名 IPA：iOS 打包与签名强依赖 macOS 与 Xcode，Windows 无法完成。

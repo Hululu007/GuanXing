@@ -110,9 +110,11 @@ struct DetailView: View {
 
     private var backdrop: some View {
         ZStack(alignment: .bottom) {
-            RemoteImage(url: item.pic)
+            // 同上：竖版海报 .fill 会纵向溢出，clipped 只裁画面不裁命中区，
+            // 溢出的部分会盖住导航栏的返回按钮。改用定尺寸容器承载图片。
+            Color.clear
                 .frame(height: 300)
-                .frame(maxWidth: .infinity)
+                .overlay { RemoteImage(url: item.pic) }
                 .clipped()
                 .blur(radius: 1.2)
                 .overlay(Color.black.opacity(0.18))
