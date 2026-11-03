@@ -15,11 +15,11 @@ struct ResumePlaybackView: View {
     var body: some View {
         ZStack {
             GXTheme.background.ignoresSafeArea()
-            if let errorMessage {
+            if let failure = errorMessage {
                 EmptyViewState(
                     icon: "exclamationmark.triangle",
                     title: "续播失败",
-                    message: errorMessage,
+                    message: failure,
                     actionTitle: "换源重找"
                 ) {
                     didStart = false
