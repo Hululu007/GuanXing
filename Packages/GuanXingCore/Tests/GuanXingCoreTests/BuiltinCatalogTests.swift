@@ -5,7 +5,7 @@ final class BuiltinCatalogTests: XCTestCase {
 
     func testCatalogIsNotEmptyAndAllBuiltin() {
         XCTAssertFalse(BuiltinSources.vod.isEmpty)
-        XCTAssertEqual(BuiltinSources.vod.count, 46)
+        XCTAssertEqual(BuiltinSources.vod.count, 47)
         XCTAssertTrue(BuiltinSources.vod.allSatisfy { $0.origin == .builtin })
         XCTAssertTrue(BuiltinSources.vod.allSatisfy { $0.isEnabled })
         XCTAssertTrue(BuiltinSources.vod.allSatisfy { !$0.isAdult })
@@ -100,8 +100,8 @@ final class BuiltinCatalogTests: XCTestCase {
     }
 
     func testCatalogVersionMatchesVerifiedDate() {
-        XCTAssertEqual(BuiltinSources.verifiedAt, "2026-11-02")
-        XCTAssertEqual(BuiltinSources.catalogVersion, "2026.11.02.3")
+        XCTAssertEqual(BuiltinSources.verifiedAt, "2026-11-03")
+        XCTAssertEqual(BuiltinSources.catalogVersion, "2026.11.03.1")
         XCTAssertGreaterThanOrEqual(BuiltinSources.verifiedAvailableCount, BuiltinSources.vod.count)
         XCTAssertGreaterThanOrEqual(BuiltinSources.verifiedCandidateCount, BuiltinSources.verifiedAvailableCount)
     }

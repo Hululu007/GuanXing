@@ -156,7 +156,7 @@ struct HomeView: View {
                     .font(.caption)
                     .foregroundStyle(GXTheme.secondaryText)
             }
-            Spacer()
+            Spacer(minLength: 8)
             Button {
                 router.openSearch()
             } label: {
@@ -166,7 +166,14 @@ struct HomeView: View {
                     .frame(width: 42, height: 42)
                     .background(GXTheme.surfaceElevated, in: Circle())
                     .overlay(Circle().stroke(GXTheme.stroke, lineWidth: 1))
+                    // 图标本身只有 42pt，且紧贴右侧。命中区不足时点偏几像素
+                    // 就会被下面的「当妈不容易」大图按钮接走，直接进了详情页。
+                    // 这里把可点区域撑到 60x60，并显式声明内容形状。
+                    .contentShape(Circle())
+                    .padding(9)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .accessibilityLabel("搜索")
         }
     }

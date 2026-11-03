@@ -10,6 +10,8 @@ struct PlayerView: View {
     @Environment(AppRouter.self) private var router
     @State private var model: PlayerModel?
     @State private var dragPosition: Double?
+    /// 播放中定期落一次观看记录，避免必须退出播放器才写进片库。
+    @State private var historyWriter: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -41,8 +43,11 @@ struct PlayerView: View {
                 )
             }
             Task { await model?.prepare() }
+            startHistoryWriter()
         }
         .onDisappear {
+            historyWriter?.cancel()
+            historyWriter = nil
             WindowBackdrop.restore()
             saveProgress()
             model?.teardown()
@@ -469,6 +474,19 @@ struct PlayerView: View {
     private func forcePortraitIfNeeded() {
         if OrientationHelper.isLandscape {
             OrientationHelper.lockPortrait()
+        }
+    }
+
+    /// 每 6 秒把当前进度落到片库，这样即使 App 被系统杀掉，
+    /// 「观看记录」里也有一条最近的进度，而不是只在正常退出时才写。
+    private func startHistoryWriter() {
+        historyWriter?.cancel()
+        historyWriter = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(6))
+                guard !Task.isCancelled else { return }
+                saveProgress()
+            }
         }
     }
 

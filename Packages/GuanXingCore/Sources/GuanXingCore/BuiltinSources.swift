@@ -9,19 +9,19 @@ import Foundation
 public enum BuiltinSources {
 
     /// 最近一次全量验证时间。
-    public static let verifiedAt = "2026-11-02"
+    public static let verifiedAt = "2026-11-03"
 
     /// 内置源目录版本；目录变动时改这个值，App 会提示可更新。
-    public static let catalogVersion = "2026.11.02.3"
+    public static let catalogVersion = "2026.11.03.1"
 
     /// 本次验证覆盖的候选接口数（juwanhezi 三类清单 + GitHub 同类配置）。
-    public static let verifiedCandidateCount = 110
+    public static let verifiedCandidateCount = 211
 
     /// 要求片单可用且能拿到真实播放地址的数量（标准 CMS 40 + APP 采集 6）。
-    public static let verifiedAvailableCount = 46
+    public static let verifiedAvailableCount = 47
 
     /// 实测能直接加载视频流的数量（余下为片单可用、播放链路可拿到但 CDN 对机房 IP 限制）。
-    public static let verifiedMediaCount = 23
+    public static let verifiedMediaCount = 24
 
     public static let vod: [VodSource] = [
         VodSource(
@@ -305,6 +305,12 @@ public enum BuiltinSources {
             api: "http://v.rbotv.cn",
             origin: .builtin,
             spider: SpiderBinding(kind: .appRJ, payload: "{\"url\":\"http://v.rbotv.cn\"}")
+        ),
+        VodSource(
+            id: "builtin_zuida",
+            name: "最大资源",
+            api: "https://zuida.xyz/api.php/provide/vod",
+            origin: .builtin
         ),
     ]
 

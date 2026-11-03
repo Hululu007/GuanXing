@@ -64,6 +64,7 @@ enum Route: Hashable {
     case detail(VodItem)
     case player(PlayerLaunch)
     case livePlayer(LiveChannel)
+    case resume(HistoryEntry)
     case sourceManager
     case importCenter
     case about

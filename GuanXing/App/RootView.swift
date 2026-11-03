@@ -7,7 +7,14 @@ struct RootView: View {
     var body: some View {
         TabView(selection: Binding(
             get: { router.selectedTab },
-            set: { router.selectedTab = $0 }
+            set: { tab in
+                // 已经停在搜索页时再次点「搜索」页签，等同于「重新搜一次」：
+                // 清掉上次结果并把光标放回输入框，不用先滑回顶部再点。
+                if tab == .search, router.selectedTab == .search {
+                    router.openSearch()
+                }
+                router.selectedTab = tab
+            }
         )) {
             NavigationStack(path: Binding(
                 get: { router.homePath },
@@ -103,6 +110,8 @@ struct RouteDestination: View {
             PlayerView(launch: launch)
         case .livePlayer(let channel):
             LivePlayerView(channel: channel)
+        case .resume(let entry):
+            ResumePlaybackView(entry: entry)
         case .sourceManager:
             SourceManagerView()
         case .importCenter:

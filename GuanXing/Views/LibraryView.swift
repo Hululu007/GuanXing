@@ -5,6 +5,7 @@ struct LibraryView: View {
     @Environment(AppModel.self) private var app
     @Environment(AppRouter.self) private var router
     @State private var mode = 0
+    @State private var showClearHistoryAlert = false
 
     var body: some View {
         ScrollView {
@@ -33,6 +34,12 @@ struct LibraryView: View {
         .scrollIndicators(.hidden)
         .gxScreenBackground()
         .toolbar(.hidden, for: .navigationBar)
+        .alert("清空全部观看记录？", isPresented: $showClearHistoryAlert) {
+            Button("清空", role: .destructive) { app.clearHistory() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("共 \(app.history.count) 条记录，清空后无法恢复。")
+        }
     }
 
     private var header: some View {
@@ -48,10 +55,14 @@ struct LibraryView: View {
             Spacer()
             if mode == 1 && !app.history.isEmpty {
                 Button("清空") {
-                    app.clearHistory()
+                    showClearHistoryAlert = true
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(GXTheme.secondaryText)
+                .buttonStyle(.plain)
+                .padding(.vertical, 8)
+                .padding(.leading, 12)
+                .contentShape(Rectangle())
             }
         }
     }
@@ -97,7 +108,8 @@ struct LibraryView: View {
             VStack(spacing: 10) {
                 ForEach(app.history) { entry in
                     Button {
-                        router.push(.detail(entry.item))
+                        // 直接续播：跳过详情页，从上次的集数与秒数接着放。
+                        router.push(.resume(entry))
                     } label: {
                         HStack(spacing: 12) {
                             RemoteImage(url: entry.item.pic)
@@ -128,6 +140,11 @@ struct LibraryView: View {
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
+                        Button {
+                            router.push(.detail(entry.item))
+                        } label: {
+                            Label("查看详情", systemImage: "info.circle")
+                        }
                         Button(role: .destructive) {
                             app.history.removeAll { $0.id == entry.id }
                             app.save()
